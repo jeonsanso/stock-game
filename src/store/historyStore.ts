@@ -20,6 +20,16 @@ export interface TradeRecord {
   timestamp: number
 }
 
+export interface SavedSnapshot {
+  id: string
+  name: string
+  savedAt: number
+  gameDate: number
+  cash: number
+  holdings: Record<string, Holding>
+  tradeHistory: TradeRecord[]
+}
+
 const SIX_MONTHS_MS = 180 * 24 * 60 * 60 * 1000
 
 interface HistoryState {
@@ -27,11 +37,15 @@ interface HistoryState {
   holdings: Record<string, Holding>
   tradeHistory: TradeRecord[]
   gameDate: number
+  saves: SavedSnapshot[]
 
   buy: (symbol: string, name: string, price: number, quantity: number) => string | null
   sell: (symbol: string, name: string, price: number, quantity: number) => string | null
   advanceDay: () => void
   advanceTo: (ms: number) => void
+  saveSnapshot: (name: string) => void
+  loadSnapshot: (id: string) => void
+  deleteSnapshot: (id: string) => void
   reset: () => void
 }
 
@@ -42,6 +56,7 @@ export const useHistoryStore = create<HistoryState>()(
       holdings: {},
       tradeHistory: [],
       gameDate: Date.now() - SIX_MONTHS_MS,
+      saves: [],
 
       buy: (symbol, name, price, quantity) => {
         const total = price * quantity
@@ -115,6 +130,35 @@ export const useHistoryStore = create<HistoryState>()(
       advanceDay: () => set({ gameDate: get().gameDate + 86_400_000 }),
       advanceTo: (ms) => set({ gameDate: ms }),
 
+      saveSnapshot: (name) => {
+        const { cash, holdings, tradeHistory, gameDate, saves } = get()
+        const snapshot: SavedSnapshot = {
+          id: crypto.randomUUID(),
+          name,
+          savedAt: Date.now(),
+          gameDate,
+          cash,
+          holdings,
+          tradeHistory,
+        }
+        set({ saves: [snapshot, ...saves] })
+      },
+
+      loadSnapshot: (id) => {
+        const snapshot = get().saves.find((s) => s.id === id)
+        if (!snapshot) return
+        set({
+          cash: snapshot.cash,
+          holdings: snapshot.holdings,
+          tradeHistory: snapshot.tradeHistory,
+          gameDate: snapshot.gameDate,
+        })
+      },
+
+      deleteSnapshot: (id) => {
+        set({ saves: get().saves.filter((s) => s.id !== id) })
+      },
+
       reset: () =>
         set({
           cash: INITIAL_CASH,
@@ -122,6 +166,7 @@ export const useHistoryStore = create<HistoryState>()(
           tradeHistory: [],
           gameDate: Date.now() - SIX_MONTHS_MS,
         }),
+
     }),
     { name: 'history-game-state' },
   ),

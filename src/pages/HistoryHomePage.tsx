@@ -5,6 +5,7 @@ import { WATCHLIST } from '../api/constants'
 import { useHistoryStore } from '../store/historyStore'
 import { formatKRW, formatChange, formatChangePercent, changeColor, changeBg } from '../utils/format'
 import StockSearch from '../components/StockSearch'
+import SaveLoadPanel from '../components/SaveLoadPanel'
 
 interface StockCardData {
   symbol: string
@@ -79,7 +80,10 @@ export default function HistoryHomePage() {
             <span className="text-amber-400 font-medium">{gameDateStr}</span> 기준 종가
           </p>
         </div>
-        <StockSearch basePath="/history/stock" />
+        <div className="flex items-center gap-2">
+          <SaveLoadPanel />
+          <StockSearch basePath="/history/stock" />
+        </div>
       </section>
 
       {kospi.length > 0 && (
