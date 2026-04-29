@@ -152,7 +152,7 @@ export async function fetchCandles(
     })
   })
 
-  return bars
+  return bars.sort((a, b) => a.time - b.time)
 }
 
 // 캔들 배열에서 dateMs(Unix ms) 이전 마지막 캔들의 close 반환 (주말/휴장일 처리 포함)

@@ -39,7 +39,8 @@ export default function HistoryTradePanel({ symbol, name, price, gameDate }: His
     if (err) {
       setMessage({ text: err, ok: false })
     } else {
-      setMessage({ text: mode === 'buy' ? '매수 완료! 하루 경과' : '매도 완료! 하루 경과', ok: true })
+      const nextDate = new Date(gameDate + 86_400_000).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })
+      setMessage({ text: `${mode === 'buy' ? '매수 완료' : '매도 완료'} · ${nextDate}로 이동`, ok: true })
       setQty('')
       setTimeout(() => setMessage(null), 2500)
     }
@@ -48,7 +49,8 @@ export default function HistoryTradePanel({ symbol, name, price, gameDate }: His
   const handleHold = () => {
     if (isEnded) return
     advanceDay()
-    setMessage({ text: '홀드 — 하루 경과', ok: true })
+    const nextDate = new Date(gameDate + 86_400_000).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })
+    setMessage({ text: `홀드 · ${nextDate}로 이동`, ok: true })
     setTimeout(() => setMessage(null), 2000)
   }
 
@@ -63,6 +65,13 @@ export default function HistoryTradePanel({ symbol, name, price, gameDate }: His
 
   return (
     <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
+      {message && (
+        <div className={`fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-xl text-sm font-medium shadow-lg transition-all ${
+          message.ok ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+        }`}>
+          {message.text}
+        </div>
+      )}
       <div className="flex rounded-lg overflow-hidden border border-gray-700 mb-4">
         <button
           onClick={() => { setMode('buy'); setQty(''); setMessage(null) }}
@@ -137,12 +146,6 @@ export default function HistoryTradePanel({ symbol, name, price, gameDate }: His
           <span>주문 금액</span>
           <span className="text-white font-semibold">{formatKRW(total)}</span>
         </div>
-
-        {message && (
-          <p className={`text-xs text-center py-1.5 rounded-lg ${message.ok ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
-            {message.text}
-          </p>
-        )}
 
         <button
           onClick={handleSubmit}

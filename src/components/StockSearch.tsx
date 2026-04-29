@@ -2,7 +2,11 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { searchSymbols, type SearchResult } from '../api/yahooFinance'
 
-export default function StockSearch() {
+interface StockSearchProps {
+  basePath?: string
+}
+
+export default function StockSearch({ basePath = '/stock' }: StockSearchProps) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
@@ -48,7 +52,7 @@ export default function StockSearch() {
   const handleSelect = (symbol: string) => {
     setQuery('')
     setOpen(false)
-    navigate(`/stock/${encodeURIComponent(symbol)}`)
+    navigate(`${basePath}/${encodeURIComponent(symbol)}`)
   }
 
   return (

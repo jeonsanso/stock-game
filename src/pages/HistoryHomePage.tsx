@@ -4,6 +4,7 @@ import { fetchCandlesCached, getCandleAt, type CandleBar } from '../api/yahooFin
 import { WATCHLIST } from '../api/constants'
 import { useHistoryStore } from '../store/historyStore'
 import { formatKRW, formatChange, formatChangePercent, changeColor, changeBg } from '../utils/format'
+import StockSearch from '../components/StockSearch'
 
 interface StockCardData {
   symbol: string
@@ -78,9 +79,7 @@ export default function HistoryHomePage() {
             <span className="text-amber-400 font-medium">{gameDateStr}</span> 기준 종가
           </p>
         </div>
-        <div className="text-xs text-gray-500 bg-gray-800/50 border border-gray-700 rounded-lg px-3 py-2">
-          종목을 선택해 매수 · 매도 · 홀드를 결정하세요
-        </div>
+        <StockSearch basePath="/history/stock" />
       </section>
 
       {kospi.length > 0 && (

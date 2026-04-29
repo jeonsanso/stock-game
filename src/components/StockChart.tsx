@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { createChart, CandlestickSeries, type IChartApi, type ISeriesApi, type SeriesType } from 'lightweight-charts'
+import { createChart, CandlestickSeries, HistogramSeries, LineSeries, type IChartApi, type ISeriesApi, type SeriesType } from 'lightweight-charts'
 import { fetchCandles, type CandleBar } from '../api/yahooFinance'
 
 type Range = '1mo' | '3mo' | '6mo' | '1y' | '2y'
@@ -24,6 +24,9 @@ export default function StockChart({ symbol, candles: externalCandles, cutoffDat
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<SeriesType> | null>(null)
+  const volumeSeriesRef = useRef<ISeriesApi<SeriesType> | null>(null)
+  const maSeriesRefs = useRef<ISeriesApi<SeriesType>[]>([])
+  const initialFitDoneRef = useRef(false)
   const [range, setRange] = useState<Range>('3mo')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -53,7 +56,7 @@ export default function StockChart({ symbol, candles: externalCandles, cutoffDat
         timeVisible: true,
       },
       width: containerRef.current.clientWidth,
-      height: 360,
+      height: 420,
     })
 
     const resizeObserver = new ResizeObserver(() => {
@@ -68,8 +71,19 @@ export default function StockChart({ symbol, candles: externalCandles, cutoffDat
       chartRef.current?.remove()
       chartRef.current = null
       seriesRef.current = null
+      volumeSeriesRef.current = null
+      maSeriesRefs.current = []
+      initialFitDoneRef.current = false
     }
   }, [])
+
+  const calcMA = (bars: CandleBar[], period: number) => {
+    return bars.map((b, i) => {
+      if (i < period - 1) return null
+      const avg = bars.slice(i - period + 1, i + 1).reduce((s, c) => s + c.close, 0) / period
+      return { time: b.time as unknown as import('lightweight-charts').Time, value: avg }
+    }).filter((v): v is { time: import('lightweight-charts').Time; value: number } => v !== null)
+  }
 
   const applyBars = (bars: CandleBar[]) => {
     if (!chartRef.current) return
@@ -80,6 +94,14 @@ export default function StockChart({ symbol, candles: externalCandles, cutoffDat
       chartRef.current.removeSeries(seriesRef.current)
       seriesRef.current = null
     }
+    if (volumeSeriesRef.current) {
+      chartRef.current.removeSeries(volumeSeriesRef.current)
+      volumeSeriesRef.current = null
+    }
+    for (const ma of maSeriesRefs.current) {
+      chartRef.current.removeSeries(ma)
+    }
+    maSeriesRefs.current = []
 
     const series = chartRef.current.addSeries(CandlestickSeries, {
       upColor: '#EF4444',
@@ -88,6 +110,18 @@ export default function StockChart({ symbol, candles: externalCandles, cutoffDat
       borderDownColor: '#3B82F6',
       wickUpColor: '#EF4444',
       wickDownColor: '#3B82F6',
+      priceScaleId: 'right',
+    })
+    series.priceScale().applyOptions({
+      scaleMargins: { top: 0.05, bottom: 0.25 },
+    })
+
+    const volumeSeries = chartRef.current.addSeries(HistogramSeries, {
+      priceScaleId: 'volume',
+      priceFormat: { type: 'volume' },
+    })
+    volumeSeries.priceScale().applyOptions({
+      scaleMargins: { top: 0.8, bottom: 0 },
     })
 
     const formatted = filtered.map((b) => ({
@@ -98,9 +132,56 @@ export default function StockChart({ symbol, candles: externalCandles, cutoffDat
       close: b.close,
     }))
 
+    const volumeFormatted = filtered.map((b) => ({
+      time: b.time as unknown as import('lightweight-charts').Time,
+      value: b.volume,
+      color: b.close >= b.open ? '#EF444466' : '#3B82F666',
+    }))
+
+    const MA_CONFIGS = [
+      { period: 5,  color: '#FBBF24' },
+      { period: 20, color: '#A78BFA' },
+      { period: 60, color: '#34D399' },
+    ]
+
+    const maSeries = MA_CONFIGS.map(({ period, color }) => {
+      const s = chartRef.current!.addSeries(LineSeries, {
+        color,
+        lineWidth: 1,
+        priceScaleId: 'right',
+        crosshairMarkerVisible: false,
+        lastValueVisible: false,
+        priceLineVisible: false,
+      })
+      s.priceScale().applyOptions({ scaleMargins: { top: 0.05, bottom: 0.25 } })
+      s.setData(calcMA(filtered, period))
+      return s
+    })
+
     seriesRef.current = series
+    volumeSeriesRef.current = volumeSeries
+    maSeriesRefs.current = maSeries
     series.setData(formatted)
-    chartRef.current.timeScale().fitContent()
+    volumeSeries.setData(volumeFormatted)
+
+    if (isHistoryMode && formatted.length > 0) {
+      series.setMarkers([{
+        time: formatted[formatted.length - 1].time,
+        position: 'aboveBar',
+        color: '#F59E0B',
+        shape: 'arrowDown',
+        text: '현재',
+      }])
+    }
+
+    if (!initialFitDoneRef.current) {
+      chartRef.current.timeScale().fitContent()
+      initialFitDoneRef.current = true
+    } else {
+      setTimeout(() => {
+        chartRef.current?.timeScale().scrollToPosition(0, false)
+      }, 0)
+    }
   }
 
   // 외부 캔들이 주어지면 그것을 사용 (역사 시뮬레이션 모드)
@@ -143,7 +224,14 @@ export default function StockChart({ symbol, candles: externalCandles, cutoffDat
   return (
     <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
-        <span className="text-sm text-gray-400 font-medium">주가 차트</span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-gray-400 font-medium">주가 차트</span>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-[#FBBF24]" />MA5</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-[#A78BFA]" />MA20</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-[#34D399]" />MA60</span>
+          </div>
+        </div>
         {!isHistoryMode && (
           <div className="flex gap-1">
             {RANGES.map((r) => (
