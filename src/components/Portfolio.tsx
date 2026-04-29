@@ -30,7 +30,7 @@ export default function Portfolio({ quotes }: PortfolioProps) {
               return (
                 <Link
                   key={h.symbol}
-                  to={`/stock/${encodeURIComponent(h.symbol)}`}
+                  to={`/realtime/stock/${encodeURIComponent(h.symbol)}`}
                   className="flex items-center justify-between bg-gray-900 border border-gray-800 hover:border-gray-700 rounded-xl px-4 py-3 transition-colors"
                 >
                   <div>

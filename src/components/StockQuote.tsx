@@ -10,7 +10,7 @@ interface StockQuoteProps {
 export default function StockQuote({ quote, name }: StockQuoteProps) {
   return (
     <Link
-      to={`/stock/${encodeURIComponent(quote.symbol)}`}
+      to={`/realtime/stock/${encodeURIComponent(quote.symbol)}`}
       className="block bg-gray-800 hover:bg-gray-750 border border-gray-700 hover:border-gray-600 rounded-xl p-4 transition-all"
     >
       <div className="flex justify-between items-start mb-2">

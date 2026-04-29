@@ -155,6 +155,42 @@ export async function fetchCandles(
   return bars
 }
 
+// 캔들 배열에서 dateMs(Unix ms) 이전 마지막 캔들의 close 반환 (주말/휴장일 처리 포함)
+export function getPriceAt(candles: CandleBar[], dateMs: number): number | null {
+  const dateSec = Math.floor(dateMs / 1000)
+  let result: number | null = null
+  for (const candle of candles) {
+    if (candle.time <= dateSec) result = candle.close
+    else break
+  }
+  return result
+}
+
+// 캔들 배열에서 dateMs 이전 마지막 캔들 반환
+export function getCandleAt(candles: CandleBar[], dateMs: number): CandleBar | null {
+  const dateSec = Math.floor(dateMs / 1000)
+  let result: CandleBar | null = null
+  for (const candle of candles) {
+    if (candle.time <= dateSec) result = candle
+    else break
+  }
+  return result
+}
+
+// 간단한 모듈 레벨 캔들 캐시 (역사 시뮬레이션에서 중복 요청 방지)
+const _candleCache = new Map<string, CandleBar[]>()
+
+export async function fetchCandlesCached(
+  symbol: string,
+  range: '1mo' | '3mo' | '6mo' | '1y' | '2y' = '1y',
+): Promise<CandleBar[]> {
+  const key = `${symbol}-${range}`
+  if (_candleCache.has(key)) return _candleCache.get(key)!
+  const candles = await fetchCandles(symbol, range)
+  _candleCache.set(key, candles)
+  return candles
+}
+
 export async function searchSymbols(query: string): Promise<SearchResult[]> {
   const res = await fetch(`/api/naver-search/ac?q=${encodeURIComponent(query)}&target=stock,index&lang=ko`)
   if (!res.ok) throw new Error(`search ${res.status}`)

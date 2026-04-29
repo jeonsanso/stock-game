@@ -20,26 +20,31 @@ export interface TradeRecord {
   timestamp: number
 }
 
-interface GameState {
+const SIX_MONTHS_MS = 180 * 24 * 60 * 60 * 1000
+
+interface HistoryState {
   cash: number
   holdings: Record<string, Holding>
   tradeHistory: TradeRecord[]
+  gameDate: number
 
   buy: (symbol: string, name: string, price: number, quantity: number) => string | null
   sell: (symbol: string, name: string, price: number, quantity: number) => string | null
+  advanceDay: () => void
   reset: () => void
 }
 
-export const useGameStore = create<GameState>()(
+export const useHistoryStore = create<HistoryState>()(
   persist(
     (set, get) => ({
       cash: INITIAL_CASH,
       holdings: {},
       tradeHistory: [],
+      gameDate: Date.now() - SIX_MONTHS_MS,
 
       buy: (symbol, name, price, quantity) => {
         const total = price * quantity
-        const { cash, holdings, tradeHistory } = get()
+        const { cash, holdings, tradeHistory, gameDate } = get()
         if (total > cash) return '잔고가 부족합니다.'
         if (quantity <= 0) return '수량을 1주 이상 입력하세요.'
 
@@ -57,7 +62,7 @@ export const useGameStore = create<GameState>()(
           quantity,
           price,
           total,
-          timestamp: Date.now(),
+          timestamp: gameDate,
         }
 
         set({
@@ -67,12 +72,13 @@ export const useGameStore = create<GameState>()(
             [symbol]: { symbol, name, quantity: newQty, avgPrice: newAvg },
           },
           tradeHistory: [record, ...tradeHistory],
+          gameDate: gameDate + 86_400_000,
         })
         return null
       },
 
       sell: (symbol, name, price, quantity) => {
-        const { cash, holdings, tradeHistory } = get()
+        const { cash, holdings, tradeHistory, gameDate } = get()
         const holding = holdings[symbol]
         if (!holding || holding.quantity < quantity) return '보유 수량이 부족합니다.'
         if (quantity <= 0) return '수량을 1주 이상 입력하세요.'
@@ -95,24 +101,28 @@ export const useGameStore = create<GameState>()(
           quantity,
           price,
           total,
-          timestamp: Date.now(),
+          timestamp: gameDate,
         }
 
         set({
           cash: cash + total,
           holdings: newHoldings,
           tradeHistory: [record, ...tradeHistory],
+          gameDate: gameDate + 86_400_000,
         })
         return null
       },
+
+      advanceDay: () => set({ gameDate: get().gameDate + 86_400_000 }),
 
       reset: () =>
         set({
           cash: INITIAL_CASH,
           holdings: {},
           tradeHistory: [],
+          gameDate: Date.now() - SIX_MONTHS_MS,
         }),
     }),
-    { name: 'realtime-game-state' },
+    { name: 'history-game-state' },
   ),
 )

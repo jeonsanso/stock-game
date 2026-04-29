@@ -15,20 +15,25 @@ export default function Header({ totalAsset }: HeaderProps) {
   const profitRate = (profitAmount / INITIAL_CASH) * 100
 
   const isActive = (path: string) =>
-    location.pathname === path ? 'text-white border-b-2 border-indigo-400' : 'text-gray-400 hover:text-white'
+    location.pathname === path || (path === '/realtime' && location.pathname === '/realtime/')
+      ? 'text-white border-b-2 border-indigo-400'
+      : 'text-gray-400 hover:text-white'
 
   return (
     <header className="bg-gray-900 border-b border-gray-800 sticky top-0 z-50">
       <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
         <div className="flex items-center gap-6">
-          <Link to="/" className="text-white font-bold text-lg tracking-tight">
-            📈 모의투자
+          <Link to="/" className="text-gray-500 hover:text-gray-300 text-xs transition-colors">
+            ← 모드 선택
+          </Link>
+          <Link to="/realtime" className="text-white font-bold text-lg tracking-tight">
+            실시간 모의투자
           </Link>
           <nav className="flex items-center gap-4 text-sm font-medium">
-            <Link to="/" className={`pb-0.5 transition-colors ${isActive('/')}`}>
+            <Link to="/realtime" className={`pb-0.5 transition-colors ${isActive('/realtime')}`}>
               홈
             </Link>
-            <Link to="/portfolio" className={`pb-0.5 transition-colors ${isActive('/portfolio')}`}>
+            <Link to="/realtime/portfolio" className={`pb-0.5 transition-colors ${isActive('/realtime/portfolio')}`}>
               포트폴리오
             </Link>
           </nav>

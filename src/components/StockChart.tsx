@@ -6,6 +6,10 @@ type Range = '1mo' | '3mo' | '6mo' | '1y' | '2y'
 
 interface StockChartProps {
   symbol: string
+  /** 외부에서 미리 가져온 캔들 데이터. 제공 시 내부 fetch 생략 */
+  candles?: CandleBar[]
+  /** Unix ms. 제공 시 이 시점 이후 캔들 숨김 (역사 시뮬레이션용) */
+  cutoffDate?: number
 }
 
 const RANGES: { label: string; value: Range }[] = [
@@ -16,13 +20,14 @@ const RANGES: { label: string; value: Range }[] = [
   { label: '2년', value: '2y' },
 ]
 
-export default function StockChart({ symbol }: StockChartProps) {
+export default function StockChart({ symbol, candles: externalCandles, cutoffDate }: StockChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<SeriesType> | null>(null)
   const [range, setRange] = useState<Range>('3mo')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const isHistoryMode = externalCandles !== undefined
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -62,10 +67,54 @@ export default function StockChart({ symbol }: StockChartProps) {
       resizeObserver.disconnect()
       chartRef.current?.remove()
       chartRef.current = null
+      seriesRef.current = null
     }
   }, [])
 
+  const applyBars = (bars: CandleBar[]) => {
+    if (!chartRef.current) return
+    const cutoffSec = cutoffDate != null ? Math.floor(cutoffDate / 1000) : Infinity
+    const filtered = bars.filter((b) => b.time <= cutoffSec)
+
+    if (seriesRef.current) {
+      chartRef.current.removeSeries(seriesRef.current)
+      seriesRef.current = null
+    }
+
+    const series = chartRef.current.addSeries(CandlestickSeries, {
+      upColor: '#EF4444',
+      downColor: '#3B82F6',
+      borderUpColor: '#EF4444',
+      borderDownColor: '#3B82F6',
+      wickUpColor: '#EF4444',
+      wickDownColor: '#3B82F6',
+    })
+
+    const formatted = filtered.map((b) => ({
+      time: b.time as unknown as import('lightweight-charts').Time,
+      open: b.open,
+      high: b.high,
+      low: b.low,
+      close: b.close,
+    }))
+
+    seriesRef.current = series
+    series.setData(formatted)
+    chartRef.current.timeScale().fitContent()
+  }
+
+  // 외부 캔들이 주어지면 그것을 사용 (역사 시뮬레이션 모드)
   useEffect(() => {
+    if (externalCandles === undefined) return
+    setError(null)
+    setLoading(false)
+    applyBars(externalCandles)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalCandles, cutoffDate])
+
+  // 내부 fetch 모드 (실시간)
+  useEffect(() => {
+    if (externalCandles !== undefined) return
     if (!chartRef.current) return
     let cancelled = false
 
@@ -75,32 +124,7 @@ export default function StockChart({ symbol }: StockChartProps) {
       try {
         const bars: CandleBar[] = await fetchCandles(symbol, range)
         if (cancelled) return
-
-        if (seriesRef.current) {
-          chartRef.current!.removeSeries(seriesRef.current)
-          seriesRef.current = null
-        }
-
-        const series = chartRef.current!.addSeries(CandlestickSeries, {
-          upColor: '#EF4444',
-          downColor: '#3B82F6',
-          borderUpColor: '#EF4444',
-          borderDownColor: '#3B82F6',
-          wickUpColor: '#EF4444',
-          wickDownColor: '#3B82F6',
-        })
-
-        const formatted = bars.map((b) => ({
-          time: b.time as unknown as import('lightweight-charts').Time,
-          open: b.open,
-          high: b.high,
-          low: b.low,
-          close: b.close,
-        }))
-
-        seriesRef.current = series
-        series.setData(formatted)
-        chartRef.current!.timeScale().fitContent()
+        applyBars(bars)
       } catch (e) {
         if (!cancelled) setError('차트 데이터를 불러오지 못했습니다.')
         console.error(e)
@@ -113,27 +137,30 @@ export default function StockChart({ symbol }: StockChartProps) {
     return () => {
       cancelled = true
     }
-  }, [symbol, range])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbol, range, externalCandles])
 
   return (
     <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
         <span className="text-sm text-gray-400 font-medium">주가 차트</span>
-        <div className="flex gap-1">
-          {RANGES.map((r) => (
-            <button
-              key={r.value}
-              onClick={() => setRange(r.value)}
-              className={`px-2.5 py-1 text-xs rounded-lg transition-colors ${
-                range === r.value
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-800'
-              }`}
-            >
-              {r.label}
-            </button>
-          ))}
-        </div>
+        {!isHistoryMode && (
+          <div className="flex gap-1">
+            {RANGES.map((r) => (
+              <button
+                key={r.value}
+                onClick={() => setRange(r.value)}
+                className={`px-2.5 py-1 text-xs rounded-lg transition-colors ${
+                  range === r.value
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                }`}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <div className="relative">
         <div ref={containerRef} />

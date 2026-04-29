@@ -40,7 +40,7 @@ export default function StockPage() {
 
   return (
     <main className="max-w-6xl mx-auto px-4 py-6">
-      <Link to="/" className="text-gray-500 hover:text-gray-300 text-sm mb-4 inline-flex items-center gap-1 transition-colors">
+      <Link to="/realtime" className="text-gray-500 hover:text-gray-300 text-sm mb-4 inline-flex items-center gap-1 transition-colors">
         ← 목록으로
       </Link>
 
