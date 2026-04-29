@@ -13,7 +13,7 @@ export default function HistoryStockPage() {
   const { symbol } = useParams<{ symbol: string }>()
   const decoded = symbol ? decodeURIComponent(symbol) : ''
 
-  const { gameDate } = useHistoryStore()
+  const { gameDate, tradeHistory } = useHistoryStore()
 
   const [allCandles, setAllCandles] = useState<CandleBar[]>([])
   const [loading, setLoading] = useState(true)
@@ -33,6 +33,11 @@ export default function HistoryStockPage() {
 
   const cutoffSec = Math.floor(gameDate / 1000)
   const visibleCandles = allCandles.filter((c) => c.time <= cutoffSec)
+
+  const nextTradingDateMs = (() => {
+    const next = allCandles.find((c) => c.time > cutoffSec)
+    return next ? next.time * 1000 : gameDate + 86_400_000
+  })()
 
   const currentCandle = getCandleAt(allCandles, gameDate)
   const currentIdx = allCandles.findLastIndex((c) => c.time <= cutoffSec)
@@ -135,6 +140,9 @@ export default function HistoryStockPage() {
             symbol={decoded}
             candles={visibleCandles}
             cutoffDate={gameDate}
+            trades={tradeHistory
+              .filter((t) => t.symbol === decoded)
+              .map((t) => ({ type: t.type, timestamp: t.timestamp }))}
           />
         </div>
         <div>
@@ -144,6 +152,7 @@ export default function HistoryStockPage() {
               name={name}
               price={price}
               gameDate={gameDate}
+              nextTradingDateMs={nextTradingDateMs}
             />
           ) : (
             <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 animate-pulse h-64" />

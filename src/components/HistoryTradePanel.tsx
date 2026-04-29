@@ -7,10 +7,11 @@ interface HistoryTradePanelProps {
   name: string
   price: number | null
   gameDate: number
+  nextTradingDateMs: number
 }
 
-export default function HistoryTradePanel({ symbol, name, price, gameDate }: HistoryTradePanelProps) {
-  const { cash, holdings, buy, sell, advanceDay } = useHistoryStore()
+export default function HistoryTradePanel({ symbol, name, price, gameDate, nextTradingDateMs }: HistoryTradePanelProps) {
+  const { cash, holdings, buy, sell, advanceTo } = useHistoryStore()
   const [mode, setMode] = useState<'buy' | 'sell'>('buy')
   const [qty, setQty] = useState('')
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null)
@@ -39,7 +40,8 @@ export default function HistoryTradePanel({ symbol, name, price, gameDate }: His
     if (err) {
       setMessage({ text: err, ok: false })
     } else {
-      const nextDate = new Date(gameDate + 86_400_000).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })
+      advanceTo(nextTradingDateMs)
+      const nextDate = new Date(nextTradingDateMs).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })
       setMessage({ text: `${mode === 'buy' ? '매수 완료' : '매도 완료'} · ${nextDate}로 이동`, ok: true })
       setQty('')
       setTimeout(() => setMessage(null), 2500)
@@ -48,8 +50,8 @@ export default function HistoryTradePanel({ symbol, name, price, gameDate }: His
 
   const handleHold = () => {
     if (isEnded) return
-    advanceDay()
-    const nextDate = new Date(gameDate + 86_400_000).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })
+    advanceTo(nextTradingDateMs)
+    const nextDate = new Date(nextTradingDateMs).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })
     setMessage({ text: `홀드 · ${nextDate}로 이동`, ok: true })
     setTimeout(() => setMessage(null), 2000)
   }

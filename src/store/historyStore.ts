@@ -31,6 +31,7 @@ interface HistoryState {
   buy: (symbol: string, name: string, price: number, quantity: number) => string | null
   sell: (symbol: string, name: string, price: number, quantity: number) => string | null
   advanceDay: () => void
+  advanceTo: (ms: number) => void
   reset: () => void
 }
 
@@ -72,7 +73,6 @@ export const useHistoryStore = create<HistoryState>()(
             [symbol]: { symbol, name, quantity: newQty, avgPrice: newAvg },
           },
           tradeHistory: [record, ...tradeHistory],
-          gameDate: gameDate + 86_400_000,
         })
         return null
       },
@@ -108,12 +108,12 @@ export const useHistoryStore = create<HistoryState>()(
           cash: cash + total,
           holdings: newHoldings,
           tradeHistory: [record, ...tradeHistory],
-          gameDate: gameDate + 86_400_000,
         })
         return null
       },
 
       advanceDay: () => set({ gameDate: get().gameDate + 86_400_000 }),
+      advanceTo: (ms) => set({ gameDate: ms }),
 
       reset: () =>
         set({
