@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { INITIAL_CASH } from '../api/constants'
+import { INITIAL_CASH, BUY_FEE_RATE, SELL_FEE_RATE } from '../api/constants'
 
 export interface Holding {
   symbol: string
@@ -37,10 +37,13 @@ interface HistoryState {
   holdings: Record<string, Holding>
   tradeHistory: TradeRecord[]
   gameDate: number
+  startDate: number
+  feeEnabled: boolean
   saves: SavedSnapshot[]
 
   buy: (symbol: string, name: string, price: number, quantity: number) => string | null
   sell: (symbol: string, name: string, price: number, quantity: number) => string | null
+  toggleFee: () => void
   advanceDay: () => void
   advanceTo: (ms: number) => void
   saveSnapshot: (name: string) => void
@@ -56,12 +59,17 @@ export const useHistoryStore = create<HistoryState>()(
       holdings: {},
       tradeHistory: [],
       gameDate: Date.now() - SIX_MONTHS_MS,
+      startDate: Date.now() - SIX_MONTHS_MS,
+      feeEnabled: false,
       saves: [],
 
       buy: (symbol, name, price, quantity) => {
+        const { cash, holdings, tradeHistory, gameDate, feeEnabled } = get()
+        const feeRate = feeEnabled ? BUY_FEE_RATE : 0
         const total = price * quantity
-        const { cash, holdings, tradeHistory, gameDate } = get()
-        if (total > cash) return '잔고가 부족합니다.'
+        const fee = Math.round(total * feeRate)
+        const totalWithFee = total + fee
+        if (totalWithFee > cash) return '잔고가 부족합니다.'
         if (quantity <= 0) return '수량을 1주 이상 입력하세요.'
 
         const prev = holdings[symbol]
@@ -77,12 +85,12 @@ export const useHistoryStore = create<HistoryState>()(
           type: 'buy',
           quantity,
           price,
-          total,
+          total: totalWithFee,
           timestamp: gameDate,
         }
 
         set({
-          cash: cash - total,
+          cash: cash - totalWithFee,
           holdings: {
             ...holdings,
             [symbol]: { symbol, name, quantity: newQty, avgPrice: newAvg },
@@ -93,12 +101,15 @@ export const useHistoryStore = create<HistoryState>()(
       },
 
       sell: (symbol, name, price, quantity) => {
-        const { cash, holdings, tradeHistory, gameDate } = get()
+        const { cash, holdings, tradeHistory, gameDate, feeEnabled } = get()
         const holding = holdings[symbol]
         if (!holding || holding.quantity < quantity) return '보유 수량이 부족합니다.'
         if (quantity <= 0) return '수량을 1주 이상 입력하세요.'
 
+        const feeRate = feeEnabled ? SELL_FEE_RATE : 0
         const total = price * quantity
+        const fee = Math.round(total * feeRate)
+        const totalAfterFee = total - fee
         const newQty = holding.quantity - quantity
         const newHoldings = { ...holdings }
 
@@ -115,17 +126,19 @@ export const useHistoryStore = create<HistoryState>()(
           type: 'sell',
           quantity,
           price,
-          total,
+          total: totalAfterFee,
           timestamp: gameDate,
         }
 
         set({
-          cash: cash + total,
+          cash: cash + totalAfterFee,
           holdings: newHoldings,
           tradeHistory: [record, ...tradeHistory],
         })
         return null
       },
+
+      toggleFee: () => set({ feeEnabled: !get().feeEnabled }),
 
       advanceDay: () => set({ gameDate: get().gameDate + 86_400_000 }),
       advanceTo: (ms) => set({ gameDate: ms }),
@@ -159,13 +172,16 @@ export const useHistoryStore = create<HistoryState>()(
         set({ saves: get().saves.filter((s) => s.id !== id) })
       },
 
-      reset: () =>
+      reset: () => {
+        const newStart = Date.now() - SIX_MONTHS_MS
         set({
           cash: INITIAL_CASH,
           holdings: {},
           tradeHistory: [],
-          gameDate: Date.now() - SIX_MONTHS_MS,
-        }),
+          gameDate: newStart,
+          startDate: newStart,
+        })
+      },
 
     }),
     { name: 'history-game-state' },

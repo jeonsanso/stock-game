@@ -55,19 +55,19 @@ export default function PortfolioPage() {
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 col-span-2 sm:col-span-1">
-          <p className="text-gray-500 text-xs mb-1">총 자산</p>
+          <p className="text-gray-400 text-xs mb-1">총 자산</p>
           <p className="text-white text-lg font-bold">{formatKRW(totalAsset)}</p>
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-3">
-          <p className="text-gray-500 text-xs mb-1">현금</p>
+          <p className="text-gray-400 text-xs mb-1">현금</p>
           <p className="text-white font-semibold">{formatKRW(cash)}</p>
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-3">
-          <p className="text-gray-500 text-xs mb-1">주식 평가액</p>
+          <p className="text-gray-400 text-xs mb-1">주식 평가액</p>
           <p className="text-white font-semibold">{loading ? '...' : formatKRW(stockValue)}</p>
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-3">
-          <p className="text-gray-500 text-xs mb-1">총 수익률</p>
+          <p className="text-gray-400 text-xs mb-1">총 수익률</p>
           <p className={`font-bold text-lg ${changeColor(profitRate)}`}>
             {formatChangePercent(profitRate)}
           </p>

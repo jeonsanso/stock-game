@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchCandlesCached, getCandleAt, type CandleBar } from '../api/yahooFinance'
 import { WATCHLIST } from '../api/constants'
+import { SYNTHETIC_STOCKS, getSyntheticCandles } from '../api/syntheticStocks'
 import { useHistoryStore } from '../store/historyStore'
 import { formatKRW, formatChange, formatChangePercent, changeColor, changeBg } from '../utils/format'
 import StockSearch from '../components/StockSearch'
@@ -20,6 +21,9 @@ export default function HistoryHomePage() {
   const { gameDate } = useHistoryStore()
   const [cards, setCards] = useState<StockCardData[]>(
     WATCHLIST.map((w) => ({ symbol: w.symbol, name: w.name, price: 0, change: 0, changePct: 0, loading: true })),
+  )
+  const [syntheticCards, setSyntheticCards] = useState<StockCardData[]>(
+    SYNTHETIC_STOCKS.map((w) => ({ symbol: w.symbol, name: w.name, price: 0, change: 0, changePct: 0, loading: true })),
   )
 
   useEffect(() => {
@@ -62,6 +66,21 @@ export default function HistoryHomePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameDate])
 
+  useEffect(() => {
+    const cutoffSec = Math.floor(gameDate / 1000)
+    setSyntheticCards(SYNTHETIC_STOCKS.map((stock, idx) => {
+      const candles = getSyntheticCandles(stock.symbol)
+      const currentIdx = candles.findLastIndex((c) => c.time <= cutoffSec)
+      const current = candles[currentIdx]
+      const prev = candles[currentIdx - 1]
+      if (!current) return { symbol: stock.symbol, name: stock.name, price: 0, change: 0, changePct: 0, loading: false }
+      const change = prev ? current.close - prev.close : 0
+      const changePct = prev && prev.close > 0 ? (change / prev.close) * 100 : 0
+      return { symbol: stock.symbol, name: stock.name, price: current.close, change, changePct, loading: false }
+    }))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameDate])
+
   const gameDateStr = new Date(gameDate).toLocaleDateString('ko-KR', {
     year: 'numeric',
     month: 'long',
@@ -76,7 +95,7 @@ export default function HistoryHomePage() {
       <section className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-white text-xl font-bold">역사 시뮬레이션</h1>
-          <p className="text-gray-500 text-sm mt-1">
+          <p className="text-gray-400 text-sm mt-1">
             <span className="text-amber-400 font-medium">{gameDateStr}</span> 기준 종가
           </p>
         </div>
@@ -107,6 +126,18 @@ export default function HistoryHomePage() {
           </div>
         </section>
       )}
+
+      <section>
+        <div className="flex items-center gap-2 mb-3">
+          <h2 className="text-gray-400 text-xs font-semibold uppercase tracking-wider">랜덤 종목</h2>
+          <span className="text-xs text-gray-400">· 상승/하락 종목 혼재, 직접 판단하세요</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          {syntheticCards.map((c) => (
+            <HistoryStockCard key={c.symbol} data={c} />
+          ))}
+        </div>
+      </section>
     </main>
   )
 }
@@ -120,7 +151,7 @@ function HistoryStockCard({ data }: { data: StockCardData }) {
       <div className="flex justify-between items-start mb-2">
         <div>
           <p className="text-white font-semibold text-sm">{data.name}</p>
-          <p className="text-gray-500 text-xs mt-0.5">{data.symbol}</p>
+          <p className="text-gray-400 text-xs mt-0.5">{data.symbol}</p>
         </div>
         {data.loading ? (
           <div className="w-12 h-5 bg-gray-700 rounded-full animate-pulse" />

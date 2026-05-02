@@ -38,7 +38,7 @@ export default function HomePage() {
       <section className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-white text-xl font-bold">한국 주식 모의 투자</h1>
-          <p className="text-gray-500 text-sm mt-1">KOSPI · KOSDAQ 실시간 시세 기반</p>
+          <p className="text-gray-400 text-sm mt-1">KOSPI · KOSDAQ 실시간 시세 기반</p>
         </div>
         <StockSearch />
       </section>

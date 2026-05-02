@@ -81,9 +81,9 @@ export default function StockSearch({ basePath = '/stock' }: StockSearchProps) {
               >
                 <div>
                   <p className="text-white text-sm font-medium">{r.shortname}</p>
-                  <p className="text-gray-500 text-xs">{r.symbol}</p>
+                  <p className="text-gray-400 text-xs">{r.symbol}</p>
                 </div>
-                <span className="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded-full">
+                <span className="text-xs text-gray-400 bg-gray-700 px-2 py-0.5 rounded-full">
                   {r.exchDisp}
                 </span>
               </button>
@@ -93,7 +93,7 @@ export default function StockSearch({ basePath = '/stock' }: StockSearchProps) {
       )}
 
       {open && results.length === 0 && !loading && query.trim() && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-gray-500 shadow-xl z-50">
+        <div className="absolute top-full left-0 right-0 mt-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-gray-400 shadow-xl z-50">
           검색 결과가 없습니다.
         </div>
       )}

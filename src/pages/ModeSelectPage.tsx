@@ -47,7 +47,7 @@ export default function ModeSelectPage() {
               </div>
               <div>
                 <h2 className="text-white font-bold text-lg">실시간 모의투자</h2>
-                <p className="text-gray-500 text-xs">현재가 기반</p>
+                <p className="text-gray-400 text-xs">현재가 기반</p>
               </div>
             </div>
 
@@ -64,11 +64,11 @@ export default function ModeSelectPage() {
                     {formatChangePercent(realtimeProfitRate)}
                   </span>
                 </div>
-                <p className="text-gray-500 text-xs">이어하기 →</p>
+                <p className="text-gray-400 text-xs">이어하기 →</p>
               </div>
             ) : (
               <div className="bg-gray-800/60 rounded-xl px-4 py-3">
-                <p className="text-gray-500 text-xs">시작 전 · 초기 자본 {formatKRW(INITIAL_CASH)}</p>
+                <p className="text-gray-400 text-xs">시작 전 · 초기 자본 {formatKRW(INITIAL_CASH)}</p>
               </div>
             )}
           </Link>
@@ -84,7 +84,7 @@ export default function ModeSelectPage() {
               </div>
               <div>
                 <h2 className="text-white font-bold text-lg">역사 시뮬레이션</h2>
-                <p className="text-gray-500 text-xs">6개월 전부터 현재까지</p>
+                <p className="text-gray-400 text-xs">6개월 전부터 현재까지</p>
               </div>
             </div>
 
@@ -103,18 +103,18 @@ export default function ModeSelectPage() {
                     {formatChangePercent(historyProfitRate)}
                   </span>
                 </div>
-                <p className="text-gray-500 text-xs">이어하기 →</p>
+                <p className="text-gray-400 text-xs">이어하기 →</p>
               </div>
             ) : (
               <div className="bg-gray-800/60 rounded-xl px-4 py-3 space-y-1">
-                <p className="text-gray-500 text-xs">시작 전 · 초기 자본 {formatKRW(INITIAL_CASH)}</p>
+                <p className="text-gray-400 text-xs">시작 전 · 초기 자본 {formatKRW(INITIAL_CASH)}</p>
                 <p className="text-amber-500/70 text-xs">{historyDateStr}부터 시작</p>
               </div>
             )}
           </Link>
         </div>
 
-        <p className="text-center text-gray-600 text-xs">
+        <p className="text-center text-gray-400 text-xs">
           각 모드의 자산과 거래 내역은 독립적으로 저장됩니다
         </p>
       </div>

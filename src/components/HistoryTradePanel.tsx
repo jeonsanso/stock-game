@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useHistoryStore } from '../store/historyStore'
 import { formatKRW, formatNumber } from '../utils/format'
+import { BUY_FEE_RATE, SELL_FEE_RATE } from '../api/constants'
 
 interface HistoryTradePanelProps {
   symbol: string
@@ -8,13 +9,15 @@ interface HistoryTradePanelProps {
   price: number | null
   gameDate: number
   nextTradingDateMs: number
+  startPrice?: number | null
+  nextDayChangePct?: number | null
 }
 
-export default function HistoryTradePanel({ symbol, name, price, gameDate, nextTradingDateMs }: HistoryTradePanelProps) {
-  const { cash, holdings, buy, sell, advanceTo } = useHistoryStore()
+export default function HistoryTradePanel({ symbol, name, price, gameDate, nextTradingDateMs, startPrice, nextDayChangePct }: HistoryTradePanelProps) {
+  const { cash, holdings, buy, sell, advanceTo, feeEnabled, toggleFee, tradeHistory } = useHistoryStore()
   const [mode, setMode] = useState<'buy' | 'sell'>('buy')
   const [qty, setQty] = useState('')
-  const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null)
+  const [message, setMessage] = useState<{ text: string; ok: boolean; changePct?: number } | null>(null)
 
   const today = Date.now()
   const isEnded = gameDate >= today
@@ -23,7 +26,10 @@ export default function HistoryTradePanel({ symbol, name, price, gameDate, nextT
   const quantity = parseInt(qty) || 0
   const safePrice = price ?? 0
   const total = safePrice * quantity
-  const maxBuy = safePrice > 0 ? Math.floor(cash / safePrice) : 0
+  const feeRate = feeEnabled ? (mode === 'buy' ? BUY_FEE_RATE : SELL_FEE_RATE) : 0
+  const fee = Math.round(total * feeRate)
+  const totalWithFee = mode === 'buy' ? total + fee : total - fee
+  const maxBuy = safePrice > 0 ? Math.floor(cash / (safePrice * (1 + (feeEnabled ? BUY_FEE_RATE : 0)))) : 0
   const maxSell = holding?.quantity ?? 0
 
   const handleSubmit = () => {
@@ -39,12 +45,12 @@ export default function HistoryTradePanel({ symbol, name, price, gameDate, nextT
         : sell(symbol, name, safePrice, quantity)
     if (err) {
       setMessage({ text: err, ok: false })
+      setTimeout(() => setMessage(null), 3000)
     } else {
       advanceTo(nextTradingDateMs)
       const nextDate = new Date(nextTradingDateMs).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })
-      setMessage({ text: `${mode === 'buy' ? '매수 완료' : '매도 완료'} · ${nextDate}로 이동`, ok: true })
+      setMessage({ text: `${mode === 'buy' ? '매수 완료' : '매도 완료'} · ${nextDate}로 이동`, ok: true, changePct: nextDayChangePct ?? undefined })
       setQty('')
-      setTimeout(() => setMessage(null), 2500)
     }
   }
 
@@ -52,8 +58,7 @@ export default function HistoryTradePanel({ symbol, name, price, gameDate, nextT
     if (isEnded) return
     advanceTo(nextTradingDateMs)
     const nextDate = new Date(nextTradingDateMs).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })
-    setMessage({ text: `홀드 · ${nextDate}로 이동`, ok: true })
-    setTimeout(() => setMessage(null), 2000)
+    setMessage({ text: `홀드 · ${nextDate}로 이동`, ok: true, changePct: nextDayChangePct ?? undefined })
   }
 
   if (isEnded) {
@@ -68,12 +73,36 @@ export default function HistoryTradePanel({ symbol, name, price, gameDate, nextT
   return (
     <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
       {message && (
-        <div className={`fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-xl text-sm font-medium shadow-lg transition-all ${
-          message.ok ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+        <div className={`mb-3 px-3 py-2.5 rounded-lg text-xs font-medium flex items-center justify-between ${
+          message.ok
+            ? 'bg-gray-800 border border-gray-700 text-gray-200'
+            : 'bg-red-500/15 border border-red-500/30 text-red-400'
         }`}>
-          {message.text}
+          <span>{message.text}</span>
+          {message.ok && message.changePct != null && (
+            <span className={`text-sm font-bold tabular-nums ml-3 ${message.changePct >= 0 ? 'text-red-400' : 'text-blue-400'}`}>
+              {message.changePct >= 0 ? '▲' : '▼'} {Math.abs(message.changePct).toFixed(2)}%
+            </span>
+          )}
         </div>
       )}
+      <button
+        onClick={toggleFee}
+        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border text-xs mb-3 transition-colors ${
+          feeEnabled
+            ? 'bg-indigo-600/20 border-indigo-500/40 text-indigo-300'
+            : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'
+        }`}
+      >
+        <span>거래 수수료</span>
+        <span className="flex items-center gap-2">
+          {feeEnabled && <span className="text-gray-400">매수 0.015% · 매도 0.215%</span>}
+          <span className={`font-semibold ${feeEnabled ? 'text-indigo-300' : 'text-gray-500'}`}>
+            {feeEnabled ? 'ON' : 'OFF'}
+          </span>
+        </span>
+      </button>
+
       <div className="flex rounded-lg overflow-hidden border border-gray-700 mb-4">
         <button
           onClick={() => { setMode('buy'); setQty(''); setMessage(null) }}
@@ -94,14 +123,14 @@ export default function HistoryTradePanel({ symbol, name, price, gameDate, nextT
       </div>
 
       <div className="space-y-3">
-        <div className="flex justify-between text-xs text-gray-500">
+        <div className="flex justify-between text-xs text-gray-400">
           <span>기준가 ({new Date(gameDate).toLocaleDateString('ko-KR')})</span>
           <span className="text-white font-medium">
             {price != null ? formatKRW(price) : '데이터 없음'}
           </span>
         </div>
 
-        <div className="flex justify-between text-xs text-gray-500">
+        <div className="flex justify-between text-xs text-gray-400">
           <span>{mode === 'buy' ? '주문 가능 금액' : '보유 수량'}</span>
           <span className="text-white font-medium">
             {mode === 'buy' ? formatKRW(cash) : `${formatNumber(maxSell)}주`}
@@ -114,7 +143,7 @@ export default function HistoryTradePanel({ symbol, name, price, gameDate, nextT
               type="number"
               min="1"
               value={qty}
-              onChange={(e) => setQty(e.target.value)}
+              onChange={(e) => { setQty(e.target.value); setMessage((m) => m?.ok ? null : m) }}
               placeholder="수량 입력"
               disabled={price == null}
               className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500 transition-colors disabled:opacity-50"
@@ -144,9 +173,17 @@ export default function HistoryTradePanel({ symbol, name, price, gameDate, nextT
           </div>
         </div>
 
-        <div className="flex justify-between text-xs text-gray-500 pt-1 border-t border-gray-800">
-          <span>주문 금액</span>
-          <span className="text-white font-semibold">{formatKRW(total)}</span>
+        <div className="pt-1 border-t border-gray-800 space-y-1.5">
+          {feeEnabled && fee > 0 && (
+            <div className="flex justify-between text-xs text-gray-500">
+              <span>수수료 ({(feeRate * 100).toFixed(3)}%)</span>
+              <span>{mode === 'buy' ? '+' : '-'}{formatKRW(fee)}</span>
+            </div>
+          )}
+          <div className="flex justify-between text-xs text-gray-400">
+            <span>{mode === 'buy' ? '실제 출금액' : '실제 입금액'}</span>
+            <span className="text-white font-semibold">{formatKRW(totalWithFee)}</span>
+          </div>
         </div>
 
         <button
@@ -168,11 +205,114 @@ export default function HistoryTradePanel({ symbol, name, price, gameDate, nextT
           홀드 (다음 날로)
         </button>
 
-        {holding && (
-          <div className="text-xs text-gray-500 text-center">
-            보유 {formatNumber(holding.quantity)}주 · 평균 {formatKRW(holding.avgPrice)}
-          </div>
-        )}
+        {holding && price != null && (() => {
+          const effectiveCost = holding.avgPrice * (1 + (feeEnabled ? BUY_FEE_RATE : 0))
+          const effectiveProceeds = price * (1 - (feeEnabled ? SELL_FEE_RATE : 0))
+          const pnl = effectiveProceeds - effectiveCost
+          const pnlPct = (pnl / effectiveCost) * 100
+          const pnlTotal = pnl * holding.quantity
+          const pos = pnl >= 0
+          return (
+            <div className={`rounded-xl px-3 py-2.5 text-xs space-y-1.5 ${pos ? 'bg-red-500/10 border border-red-500/20' : 'bg-blue-500/10 border border-blue-500/20'}`}>
+              <div className="flex justify-between">
+                <span className="text-gray-400">보유 수량</span>
+                <span className="text-white font-medium">{formatNumber(holding.quantity)}주</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">평균 단가</span>
+                <span className="text-white font-medium">
+                  {formatKRW(holding.avgPrice)}
+                  {feeEnabled && <span className="text-gray-500 ml-1">(수수료 포함 {formatKRW(Math.round(effectiveCost))})</span>}
+                </span>
+              </div>
+              <div className="flex justify-between border-t border-gray-700 pt-1.5">
+                <span className="text-gray-400">평가 손익</span>
+                <span className={`font-bold ${pos ? 'text-red-400' : 'text-blue-400'}`}>
+                  {pos ? '+' : ''}{formatKRW(pnlTotal)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">수익률</span>
+                <span className={`font-bold text-sm ${pos ? 'text-red-400' : 'text-blue-400'}`}>
+                  {pos ? '+' : ''}{pnlPct.toFixed(2)}%
+                </span>
+              </div>
+              {startPrice != null && startPrice > 0 && price != null && (() => {
+                const bhCost = startPrice * (1 + (feeEnabled ? BUY_FEE_RATE : 0))
+                const bhProceeds = price * (1 - (feeEnabled ? SELL_FEE_RATE : 0))
+                const bhPct = ((bhProceeds - bhCost) / bhCost) * 100
+                const diff = pnlPct - bhPct
+                return (
+                  <div className="flex justify-between border-t border-gray-700 pt-1.5">
+                    <span className="text-gray-400">바이앤홀드 대비</span>
+                    <span className={`font-bold text-sm ${diff >= 0 ? 'text-red-400' : 'text-blue-400'}`}>
+                      {diff >= 0 ? '+' : ''}{diff.toFixed(2)}%
+                      <span className="text-xs font-normal text-gray-500 ml-1">
+                        ({diff >= 0 ? '초과수익' : '미달'})
+                      </span>
+                    </span>
+                  </div>
+                )
+              })()}
+            </div>
+          )
+        })()}
+
+        {!holding && price != null && (() => {
+          const symbolTrades = tradeHistory.filter((t) => t.symbol === symbol)
+          const buys = symbolTrades.filter((t) => t.type === 'buy')
+          const sells = symbolTrades.filter((t) => t.type === 'sell')
+          if (buys.length === 0 || sells.length === 0) return null
+
+          const totalSpent = buys.reduce((s, t) => s + t.total, 0)
+          const totalReceived = sells.reduce((s, t) => s + t.total, 0)
+          const realizedPnl = totalReceived - totalSpent
+          const realizedPct = (realizedPnl / totalSpent) * 100
+          const pos = realizedPnl >= 0
+
+          return (
+            <div className={`rounded-xl px-3 py-2.5 text-xs space-y-1.5 ${pos ? 'bg-red-500/10 border border-red-500/20' : 'bg-blue-500/10 border border-blue-500/20'}`}>
+              <p className="text-gray-400 font-medium">매도 완료 결과</p>
+              <div className="flex justify-between">
+                <span className="text-gray-400">총 매수 금액</span>
+                <span className="text-white">{formatKRW(totalSpent)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">총 매도 금액</span>
+                <span className="text-white">{formatKRW(totalReceived)}</span>
+              </div>
+              <div className="flex justify-between border-t border-gray-700 pt-1.5">
+                <span className="text-gray-400">실현 손익</span>
+                <span className={`font-bold ${pos ? 'text-red-400' : 'text-blue-400'}`}>
+                  {pos ? '+' : ''}{formatKRW(Math.round(realizedPnl))}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">실현 수익률</span>
+                <span className={`font-bold text-sm ${pos ? 'text-red-400' : 'text-blue-400'}`}>
+                  {pos ? '+' : ''}{realizedPct.toFixed(2)}%
+                </span>
+              </div>
+              {startPrice != null && startPrice > 0 && (() => {
+                const bhCost = startPrice * (1 + (feeEnabled ? BUY_FEE_RATE : 0))
+                const bhProceeds = price * (1 - (feeEnabled ? SELL_FEE_RATE : 0))
+                const bhPct = ((bhProceeds - bhCost) / bhCost) * 100
+                const diff = realizedPct - bhPct
+                return (
+                  <div className="flex justify-between border-t border-gray-700 pt-1.5">
+                    <span className="text-gray-400">바이앤홀드 대비</span>
+                    <span className={`font-bold ${diff >= 0 ? 'text-red-400' : 'text-blue-400'}`}>
+                      {diff >= 0 ? '+' : ''}{diff.toFixed(2)}%
+                      <span className="text-xs font-normal text-gray-500 ml-1">
+                        ({diff >= 0 ? '초과수익' : '미달'})
+                      </span>
+                    </span>
+                  </div>
+                )
+              })()}
+            </div>
+          )
+        })()}
       </div>
     </div>
   )

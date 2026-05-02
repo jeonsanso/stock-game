@@ -40,7 +40,7 @@ export default function StockPage() {
 
   return (
     <main className="max-w-6xl mx-auto px-4 py-6">
-      <Link to="/realtime" className="text-gray-500 hover:text-gray-300 text-sm mb-4 inline-flex items-center gap-1 transition-colors">
+      <Link to="/realtime" className="text-gray-400 hover:text-gray-300 text-sm mb-4 inline-flex items-center gap-1 transition-colors">
         ← 목록으로
       </Link>
 
@@ -61,7 +61,7 @@ export default function StockPage() {
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <h1 className="text-white text-2xl font-bold">{name}</h1>
-                <span className="text-gray-500 text-sm">{decoded}</span>
+                <span className="text-gray-400 text-sm">{decoded}</span>
               </div>
               <div className="flex items-end gap-3">
                 <span className="text-white text-3xl font-bold">{formatKRW(quote.regularMarketPrice)}</span>
@@ -85,7 +85,7 @@ export default function StockPage() {
               { label: '거래량', value: `${formatNumber(quote.regularMarketVolume)}주` },
             ].map((item) => (
               <div key={item.label} className="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2.5">
-                <p className="text-gray-500 text-xs mb-1">{item.label}</p>
+                <p className="text-gray-400 text-xs mb-1">{item.label}</p>
                 <p className="text-white text-sm font-semibold">{item.value}</p>
               </div>
             ))}

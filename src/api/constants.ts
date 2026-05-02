@@ -18,3 +18,6 @@ export const WATCHLIST: StockInfo[] = [
 ]
 
 export const INITIAL_CASH = 10_000_000
+
+export const BUY_FEE_RATE = 0.00015   // 0.015% 증권사 수수료
+export const SELL_FEE_RATE = 0.00215  // 0.015% 수수료 + 0.2% 증권거래세

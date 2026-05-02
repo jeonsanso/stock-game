@@ -32,14 +32,14 @@ export default function SaveLoadPanel() {
           <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">
               <h2 className="text-white font-bold">저장 / 불러오기</h2>
-              <button onClick={() => setOpen(false)} className="text-gray-500 hover:text-gray-300 text-lg">✕</button>
+              <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-300 text-lg">✕</button>
             </div>
 
             <div className="p-5 space-y-5">
               {/* 현재 상태 저장 */}
               <div>
-                <p className="text-xs text-gray-500 mb-2">현재 상태 저장</p>
-                <p className="text-xs text-gray-600 mb-3">
+                <p className="text-xs text-gray-400 mb-2">현재 상태 저장</p>
+                <p className="text-xs text-gray-400 mb-3">
                   {new Date(gameDate).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })} ·{' '}
                   {formatKRW(totalAsset)}{' '}
                   <span className={returnPct >= 0 ? 'text-red-400' : 'text-blue-400'}>
@@ -66,9 +66,9 @@ export default function SaveLoadPanel() {
 
               {/* 저장 목록 */}
               <div>
-                <p className="text-xs text-gray-500 mb-2">저장 목록 ({saves.length})</p>
+                <p className="text-xs text-gray-400 mb-2">저장 목록 ({saves.length})</p>
                 {saves.length === 0 ? (
-                  <p className="text-gray-600 text-sm text-center py-6">저장된 상태가 없습니다.</p>
+                  <p className="text-gray-400 text-sm text-center py-6">저장된 상태가 없습니다.</p>
                 ) : (
                   <ul className="space-y-2 max-h-64 overflow-y-auto">
                     {saves.map((s) => {
@@ -77,7 +77,7 @@ export default function SaveLoadPanel() {
                         <li key={s.id} className="bg-gray-800 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
                           <div className="min-w-0">
                             <p className="text-white text-sm font-medium truncate">{s.name}</p>
-                            <p className="text-gray-500 text-xs mt-0.5">
+                            <p className="text-gray-400 text-xs mt-0.5">
                               {new Date(s.savedAt).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} ·{' '}
                               <span className={ret >= 0 ? 'text-red-400' : 'text-blue-400'}>
                                 {ret >= 0 ? '+' : ''}{ret.toFixed(2)}%

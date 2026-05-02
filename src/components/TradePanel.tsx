@@ -58,12 +58,12 @@ export default function TradePanel({ symbol, name, price }: TradePanelProps) {
       </div>
 
       <div className="space-y-3">
-        <div className="flex justify-between text-xs text-gray-500">
+        <div className="flex justify-between text-xs text-gray-400">
           <span>현재가</span>
           <span className="text-white font-medium">{formatKRW(price)}</span>
         </div>
 
-        <div className="flex justify-between text-xs text-gray-500">
+        <div className="flex justify-between text-xs text-gray-400">
           <span>{mode === 'buy' ? '주문 가능 금액' : '보유 수량'}</span>
           <span className="text-white font-medium">
             {mode === 'buy' ? formatKRW(cash) : `${formatNumber(maxSell)}주`}
@@ -103,7 +103,7 @@ export default function TradePanel({ symbol, name, price }: TradePanelProps) {
           </div>
         </div>
 
-        <div className="flex justify-between text-xs text-gray-500 pt-1 border-t border-gray-800">
+        <div className="flex justify-between text-xs text-gray-400 pt-1 border-t border-gray-800">
           <span>주문 금액</span>
           <span className="text-white font-semibold">{formatKRW(total)}</span>
         </div>
@@ -126,7 +126,7 @@ export default function TradePanel({ symbol, name, price }: TradePanelProps) {
         </button>
 
         {holding && (
-          <div className="text-xs text-gray-500 text-center">
+          <div className="text-xs text-gray-400 text-center">
             보유 {formatNumber(holding.quantity)}주 · 평균 {formatKRW(holding.avgPrice)}
           </div>
         )}
