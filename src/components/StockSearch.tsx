@@ -49,10 +49,10 @@ export default function StockSearch({ basePath = '/stock' }: StockSearchProps) {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  const handleSelect = (symbol: string) => {
+  const handleSelect = (symbol: string, name: string) => {
     setQuery('')
     setOpen(false)
-    navigate(`${basePath}/${encodeURIComponent(symbol)}`)
+    navigate(`${basePath}/${encodeURIComponent(symbol)}`, { state: { name } })
   }
 
   return (
@@ -76,7 +76,7 @@ export default function StockSearch({ basePath = '/stock' }: StockSearchProps) {
           {results.map((r) => (
             <li key={r.symbol}>
               <button
-                onClick={() => handleSelect(r.symbol)}
+                onClick={() => handleSelect(r.symbol, r.shortname ?? r.symbol)}
                 className="w-full flex justify-between items-center px-4 py-3 hover:bg-gray-700 transition-colors text-left"
               >
                 <div>

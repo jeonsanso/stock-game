@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom'
 import { fetchCandlesCached, getCandleAt, type CandleBar } from '../api/yahooFinance'
 import { WATCHLIST } from '../api/constants'
 import { getSyntheticName, getSyntheticCandles, isSynthetic } from '../api/syntheticStocks'
@@ -13,9 +13,12 @@ const watchlistNameMap = Object.fromEntries(WATCHLIST.map((w) => [w.symbol, w.na
 export default function HistoryStockPage() {
   const { symbol } = useParams<{ symbol: string }>()
   const decoded = symbol ? decodeURIComponent(symbol) : ''
+  const navigate = useNavigate()
 
-  const { gameDate, startDate, tradeHistory } = useHistoryStore()
-
+  const { stockPositions, startDate, tradeHistory, completeStock, customSymbols, addCustomSymbol } = useHistoryStore()
+  const gameDate = stockPositions[decoded] ?? startDate
+  const location = useLocation()
+  const locationName = (location.state as { name?: string } | null)?.name
 
   const [allCandles, setAllCandles] = useState<CandleBar[]>([])
   const [loading, setLoading] = useState(true)
@@ -46,6 +49,7 @@ export default function HistoryStockPage() {
 
   const nextCandle = allCandles.find((c) => c.time > cutoffSec)
   const nextTradingDateMs = nextCandle ? nextCandle.time * 1000 : gameDate + 86_400_000
+  const hasReachedEnd = !nextCandle && allCandles.length > 0 && !loading
   const nextDayChangePct =
     nextCandle && currentCandle && currentCandle.close > 0
       ? ((nextCandle.close - currentCandle.close) / currentCandle.close) * 100
@@ -66,9 +70,17 @@ export default function HistoryStockPage() {
       ? ((price - startPrice) / startPrice) * 100
       : null
 
-  const name = isSynthetic(decoded) ? getSyntheticName(decoded) : (watchlistNameMap[decoded] ?? decoded)
-  const today = Date.now()
-  const isEnded = gameDate >= today
+  const name = isSynthetic(decoded)
+    ? getSyntheticName(decoded)
+    : (watchlistNameMap[decoded] ?? customSymbols[decoded] ?? locationName ?? decoded)
+
+  // 검색으로 진입한 비-기본 종목 자동 등록
+  useEffect(() => {
+    if (!isSynthetic(decoded) && !watchlistNameMap[decoded] && allCandles.length > 0) {
+      addCustomSymbol(decoded, locationName ?? customSymbols[decoded] ?? decoded)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allCandles.length])
   const [infoOpen, setInfoOpen] = useState(true)
   const [isFullscreen, setIsFullscreen] = useState(false)
 
@@ -86,6 +98,11 @@ export default function HistoryStockPage() {
     day: '2-digit',
   })
 
+  const handleComplete = useCallback(() => {
+    completeStock(decoded)
+    navigate(`/history/results/${encodeURIComponent(decoded)}`)
+  }, [decoded, completeStock, navigate])
+
   return (
     <main className="max-w-6xl mx-auto px-4 py-6">
       <Link
@@ -102,11 +119,9 @@ export default function HistoryStockPage() {
       )}
 
       <div className="mt-3 mb-4 flex items-center gap-2">
-        {!isEnded && (
-          <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-semibold px-2.5 py-1 rounded-full">
-            {gameDateStr} 기준
-          </span>
-        )}
+        <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-semibold px-2.5 py-1 rounded-full">
+          {gameDateStr} 기준
+        </span>
         {!loading && (
           <button
             onClick={() => setInfoOpen((v) => !v)}
@@ -206,6 +221,8 @@ export default function HistoryStockPage() {
                   price={price}
                   gameDate={gameDate}
                   nextTradingDateMs={nextTradingDateMs}
+                  hasReachedEnd={hasReachedEnd}
+                  onComplete={handleComplete}
                   startPrice={startPrice}
                   nextDayChangePct={nextDayChangePct}
                 />
@@ -241,6 +258,8 @@ export default function HistoryStockPage() {
                 price={price}
                 gameDate={gameDate}
                 nextTradingDateMs={nextTradingDateMs}
+                hasReachedEnd={hasReachedEnd}
+                onComplete={handleComplete}
                 startPrice={startPrice}
                 nextDayChangePct={nextDayChangePct}
               />

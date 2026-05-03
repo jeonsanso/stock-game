@@ -24,7 +24,8 @@ export interface SavedSnapshot {
   id: string
   name: string
   savedAt: number
-  gameDate: number
+  stockPositions: Record<string, number>
+  completedStocks: string[]
   cash: number
   holdings: Record<string, Holding>
   tradeHistory: TradeRecord[]
@@ -36,7 +37,9 @@ interface HistoryState {
   cash: number
   holdings: Record<string, Holding>
   tradeHistory: TradeRecord[]
-  gameDate: number
+  stockPositions: Record<string, number>
+  completedStocks: string[]
+  customSymbols: Record<string, string>  // symbol → name (user-searched stocks)
   startDate: number
   feeEnabled: boolean
   saves: SavedSnapshot[]
@@ -44,8 +47,10 @@ interface HistoryState {
   buy: (symbol: string, name: string, price: number, quantity: number) => string | null
   sell: (symbol: string, name: string, price: number, quantity: number) => string | null
   toggleFee: () => void
-  advanceDay: () => void
-  advanceTo: (ms: number) => void
+  advanceStockTo: (symbol: string, ms: number) => void
+  completeStock: (symbol: string) => void
+  addCustomSymbol: (symbol: string, name: string) => void
+  removeCustomSymbol: (symbol: string) => void
   saveSnapshot: (name: string) => void
   loadSnapshot: (id: string) => void
   deleteSnapshot: (id: string) => void
@@ -58,13 +63,16 @@ export const useHistoryStore = create<HistoryState>()(
       cash: INITIAL_CASH,
       holdings: {},
       tradeHistory: [],
-      gameDate: Date.now() - SIX_MONTHS_MS,
+      stockPositions: {},
+      completedStocks: [],
+      customSymbols: {},
       startDate: Date.now() - SIX_MONTHS_MS,
       feeEnabled: false,
       saves: [],
 
       buy: (symbol, name, price, quantity) => {
-        const { cash, holdings, tradeHistory, gameDate, feeEnabled } = get()
+        const { cash, holdings, tradeHistory, stockPositions, startDate, feeEnabled } = get()
+        const stockDate = stockPositions[symbol] ?? startDate
         const feeRate = feeEnabled ? BUY_FEE_RATE : 0
         const total = price * quantity
         const fee = Math.round(total * feeRate)
@@ -86,7 +94,7 @@ export const useHistoryStore = create<HistoryState>()(
           quantity,
           price,
           total: totalWithFee,
-          timestamp: gameDate,
+          timestamp: stockDate,
         }
 
         set({
@@ -101,7 +109,8 @@ export const useHistoryStore = create<HistoryState>()(
       },
 
       sell: (symbol, name, price, quantity) => {
-        const { cash, holdings, tradeHistory, gameDate, feeEnabled } = get()
+        const { cash, holdings, tradeHistory, stockPositions, startDate, feeEnabled } = get()
+        const stockDate = stockPositions[symbol] ?? startDate
         const holding = holdings[symbol]
         if (!holding || holding.quantity < quantity) return '보유 수량이 부족합니다.'
         if (quantity <= 0) return '수량을 1주 이상 입력하세요.'
@@ -127,7 +136,7 @@ export const useHistoryStore = create<HistoryState>()(
           quantity,
           price,
           total: totalAfterFee,
-          timestamp: gameDate,
+          timestamp: stockDate,
         }
 
         set({
@@ -140,16 +149,44 @@ export const useHistoryStore = create<HistoryState>()(
 
       toggleFee: () => set({ feeEnabled: !get().feeEnabled }),
 
-      advanceDay: () => set({ gameDate: Math.min(get().gameDate + 86_400_000, Date.now()) }),
-      advanceTo: (ms) => set({ gameDate: Math.min(ms, Date.now()) }),
+      advanceStockTo: (symbol, ms) => {
+        set({
+          stockPositions: {
+            ...get().stockPositions,
+            [symbol]: Math.min(ms, Date.now()),
+          },
+        })
+      },
+
+      completeStock: (symbol) => {
+        const { completedStocks } = get()
+        if (!completedStocks.includes(symbol)) {
+          set({ completedStocks: [...completedStocks, symbol] })
+        }
+      },
+
+      addCustomSymbol: (symbol, name) => {
+        const { customSymbols } = get()
+        if (!customSymbols[symbol]) {
+          set({ customSymbols: { ...customSymbols, [symbol]: name } })
+        }
+      },
+
+      removeCustomSymbol: (symbol) => {
+        const { customSymbols } = get()
+        const next = { ...customSymbols }
+        delete next[symbol]
+        set({ customSymbols: next })
+      },
 
       saveSnapshot: (name) => {
-        const { cash, holdings, tradeHistory, gameDate, saves } = get()
+        const { cash, holdings, tradeHistory, stockPositions, completedStocks, saves } = get()
         const snapshot: SavedSnapshot = {
           id: crypto.randomUUID(),
           name,
           savedAt: Date.now(),
-          gameDate,
+          stockPositions,
+          completedStocks,
           cash,
           holdings,
           tradeHistory,
@@ -164,7 +201,8 @@ export const useHistoryStore = create<HistoryState>()(
           cash: snapshot.cash,
           holdings: snapshot.holdings,
           tradeHistory: snapshot.tradeHistory,
-          gameDate: snapshot.gameDate,
+          stockPositions: snapshot.stockPositions ?? {},
+          completedStocks: snapshot.completedStocks ?? [],
         })
       },
 
@@ -178,17 +216,20 @@ export const useHistoryStore = create<HistoryState>()(
           cash: INITIAL_CASH,
           holdings: {},
           tradeHistory: [],
-          gameDate: newStart,
+          stockPositions: {},
+          completedStocks: [],
+          customSymbols: {},
           startDate: newStart,
         })
       },
-
     }),
     {
-      name: 'history-game-state',
+      name: 'history-game-state-v2',
       onRehydrateStorage: () => (state) => {
-        if (state && state.gameDate > Date.now()) {
-          state.gameDate = Date.now() - SIX_MONTHS_MS
+        if (state) {
+          if (!state.stockPositions) state.stockPositions = {}
+          if (!state.completedStocks) state.completedStocks = []
+          if (!state.customSymbols) state.customSymbols = {}
         }
       },
     },

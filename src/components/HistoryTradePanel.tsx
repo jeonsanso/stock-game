@@ -9,18 +9,22 @@ interface HistoryTradePanelProps {
   price: number | null
   gameDate: number
   nextTradingDateMs: number
+  hasReachedEnd: boolean
+  onComplete: () => void
   startPrice?: number | null
   nextDayChangePct?: number | null
 }
 
-export default function HistoryTradePanel({ symbol, name, price, gameDate, nextTradingDateMs, startPrice, nextDayChangePct }: HistoryTradePanelProps) {
-  const { cash, holdings, buy, sell, advanceTo, feeEnabled, toggleFee, tradeHistory } = useHistoryStore()
+export default function HistoryTradePanel({
+  symbol, name, price, gameDate, nextTradingDateMs,
+  hasReachedEnd, onComplete, startPrice, nextDayChangePct,
+}: HistoryTradePanelProps) {
+  const { cash, holdings, buy, sell, advanceStockTo, completedStocks, feeEnabled, toggleFee, tradeHistory } = useHistoryStore()
   const [mode, setMode] = useState<'buy' | 'sell'>('buy')
   const [qty, setQty] = useState('')
   const [message, setMessage] = useState<{ text: string; ok: boolean; changePct?: number } | null>(null)
 
-  const today = Date.now()
-  const isEnded = gameDate >= today
+  const isCompleted = completedStocks.includes(symbol)
 
   const holding = holdings[symbol]
   const quantity = parseInt(qty) || 0
@@ -33,7 +37,6 @@ export default function HistoryTradePanel({ symbol, name, price, gameDate, nextT
   const maxSell = holding?.quantity ?? 0
 
   const handleSubmit = () => {
-    if (isEnded) return
     setMessage(null)
     if (quantity <= 0) {
       setMessage({ text: '수량을 입력하세요.', ok: false })
@@ -47,7 +50,7 @@ export default function HistoryTradePanel({ symbol, name, price, gameDate, nextT
       setMessage({ text: err, ok: false })
       setTimeout(() => setMessage(null), 3000)
     } else {
-      advanceTo(nextTradingDateMs)
+      advanceStockTo(symbol, nextTradingDateMs)
       const nextDate = new Date(nextTradingDateMs).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })
       setMessage({ text: `${mode === 'buy' ? '매수 완료' : '매도 완료'} · ${nextDate}로 이동`, ok: true, changePct: nextDayChangePct ?? undefined })
       setQty('')
@@ -55,17 +58,37 @@ export default function HistoryTradePanel({ symbol, name, price, gameDate, nextT
   }
 
   const handleHold = () => {
-    if (isEnded) return
-    advanceTo(nextTradingDateMs)
+    advanceStockTo(symbol, nextTradingDateMs)
     const nextDate = new Date(nextTradingDateMs).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })
     setMessage({ text: `홀드 · ${nextDate}로 이동`, ok: true, changePct: nextDayChangePct ?? undefined })
   }
 
-  if (isEnded) {
+  if (isCompleted) {
     return (
-      <div className="bg-gray-900 rounded-xl border border-gray-800 p-6 text-center space-y-2">
-        <p className="text-white font-bold text-lg">시뮬레이션 종료</p>
-        <p className="text-gray-400 text-sm">현재 날짜에 도달했습니다.</p>
+      <div className="bg-gray-900 rounded-xl border border-gray-800 p-6 text-center space-y-3">
+        <p className="text-white font-bold text-lg">완료된 종목</p>
+        <p className="text-gray-400 text-sm">이 종목의 거래가 완료됐습니다.</p>
+        <button
+          onClick={onComplete}
+          className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl transition-colors"
+        >
+          결과 다시 보기
+        </button>
+      </div>
+    )
+  }
+
+  if (hasReachedEnd) {
+    return (
+      <div className="bg-gray-900 rounded-xl border border-indigo-500/30 p-6 text-center space-y-3">
+        <p className="text-indigo-300 font-bold text-lg">현재 날짜 도달</p>
+        <p className="text-gray-400 text-sm">이 종목의 데이터가 오늘까지 도달했습니다.</p>
+        <button
+          onClick={onComplete}
+          className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl transition-colors"
+        >
+          종목 완료 · 결과 확인
+        </button>
       </div>
     )
   }

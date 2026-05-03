@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchCandlesCached, getPriceAt, type CandleBar } from '../api/yahooFinance'
+import { getSyntheticCandles, isSynthetic } from '../api/syntheticStocks'
 import { useHistoryStore, type TradeRecord, type Holding } from '../store/historyStore'
 import { formatKRW, formatNumber, formatChangePercent, formatChange, changeColor, changeBg } from '../utils/format'
 import { INITIAL_CASH } from '../api/constants'
 
 export default function HistoryPortfolioPage() {
-  const { cash, holdings, tradeHistory, gameDate } = useHistoryStore()
+  const { cash, holdings, tradeHistory, stockPositions, startDate } = useHistoryStore()
   const [priceMap, setPriceMap] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(false)
 
@@ -21,12 +22,15 @@ export default function HistoryPortfolioPage() {
     let cancelled = false
     setLoading(true)
     Promise.all(
-      holdingSymbols.map((sym) =>
-        fetchCandlesCached(sym, '1y').then((candles: CandleBar[]) => {
-          const price = getPriceAt(candles, gameDate)
-          return [sym, price ?? 0] as const
-        }),
-      ),
+      holdingSymbols.map(async (sym) => {
+        const date = stockPositions[sym] ?? startDate
+        if (isSynthetic(sym)) {
+          const candles = getSyntheticCandles(sym)
+          return [sym, getPriceAt(candles, date) ?? 0] as const
+        }
+        const candles: CandleBar[] = await fetchCandlesCached(sym, '1y')
+        return [sym, getPriceAt(candles, date) ?? 0] as const
+      }),
     )
       .then((entries) => {
         if (!cancelled) setPriceMap(Object.fromEntries(entries))
@@ -36,7 +40,7 @@ export default function HistoryPortfolioPage() {
 
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symbolsKey, gameDate])
+  }, [symbolsKey, JSON.stringify(stockPositions)])
 
   const stockValue = Object.values(holdings).reduce((sum, h) => {
     const price = priceMap[h.symbol] ?? h.avgPrice
@@ -47,19 +51,10 @@ export default function HistoryPortfolioPage() {
   const profitAmount = totalAsset - INITIAL_CASH
   const profitRate = (profitAmount / INITIAL_CASH) * 100
 
-  const gameDateStr = new Date(gameDate).toLocaleDateString('ko-KR', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  })
-
   return (
     <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
       <div className="flex items-center gap-3">
         <h1 className="text-white text-xl font-bold">포트폴리오</h1>
-        <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-semibold px-2.5 py-1 rounded-full">
-          {gameDateStr} 기준
-        </span>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

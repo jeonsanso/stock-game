@@ -13,6 +13,7 @@ import HistoryResultsPage from './pages/HistoryResultsPage'
 import { useGameStore } from './store/gameStore'
 import { useHistoryStore } from './store/historyStore'
 import { fetchQuotes, fetchCandlesCached, getPriceAt } from './api/yahooFinance'
+import { getSyntheticCandles, isSynthetic } from './api/syntheticStocks'
 
 // 실시간 모의투자 레이아웃
 function RealtimeLayout() {
@@ -55,7 +56,7 @@ function RealtimeLayout() {
 
 // 역사 시뮬레이션 레이아웃
 function HistoryLayout() {
-  const { cash, holdings, gameDate } = useHistoryStore()
+  const { cash, holdings, stockPositions, startDate } = useHistoryStore()
   const [stockValue, setStockValue] = useState(0)
 
   useEffect(() => {
@@ -65,19 +66,29 @@ function HistoryLayout() {
       return
     }
     let cancelled = false
-    Promise.all(symbols.map((sym) => fetchCandlesCached(sym, '1y')))
-      .then((allCandles) => {
+    Promise.all(
+      symbols.map(async (sym) => {
+        const date = stockPositions[sym] ?? startDate
+        if (isSynthetic(sym)) {
+          const candles = getSyntheticCandles(sym)
+          return getPriceAt(candles, date) ?? 0
+        }
+        const candles = await fetchCandlesCached(sym, '1y')
+        return getPriceAt(candles, date) ?? 0
+      })
+    )
+      .then((prices) => {
         if (cancelled) return
         const val = symbols.reduce((sum, sym, i) => {
           const h = holdings[sym]
-          const price = getPriceAt(allCandles[i], gameDate) ?? h.avgPrice
-          return sum + price * h.quantity
+          return sum + (h ? prices[i] * h.quantity : 0)
         }, 0)
         setStockValue(val)
       })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [holdings, gameDate])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [holdings, JSON.stringify(stockPositions)])
 
   const totalAsset = cash + stockValue
 
@@ -88,7 +99,7 @@ function HistoryLayout() {
         <Route index element={<HistoryHomePage />} />
         <Route path="stock/:symbol" element={<HistoryStockPage />} />
         <Route path="portfolio" element={<HistoryPortfolioPage />} />
-        <Route path="results" element={<HistoryResultsPage />} />
+        <Route path="results/:symbol" element={<HistoryResultsPage />} />
       </Routes>
     </div>
   )
