@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchCandlesCached, getCandleAt, type CandleBar } from '../api/yahooFinance'
 import { WATCHLIST } from '../api/constants'
-import { SYNTHETIC_STOCKS, getSyntheticCandles } from '../api/syntheticStocks'
+import { SYNTHETIC_STOCKS, ALTERNATE_STOCKS, getSyntheticCandles } from '../api/syntheticStocks'
 import { useHistoryStore } from '../store/historyStore'
 import { formatKRW, formatChange, formatChangePercent, changeColor, changeBg } from '../utils/format'
 import StockSearch from '../components/StockSearch'
@@ -19,12 +19,11 @@ interface StockCardData {
 
 export default function HistoryHomePage() {
   const { gameDate } = useHistoryStore()
+  const isEnded = gameDate >= Date.now()
   const [cards, setCards] = useState<StockCardData[]>(
     WATCHLIST.map((w) => ({ symbol: w.symbol, name: w.name, price: 0, change: 0, changePct: 0, loading: true })),
   )
-  const [syntheticCards, setSyntheticCards] = useState<StockCardData[]>(
-    SYNTHETIC_STOCKS.map((w) => ({ symbol: w.symbol, name: w.name, price: 0, change: 0, changePct: 0, loading: true })),
-  )
+  const [syntheticCards, setSyntheticCards] = useState<StockCardData[]>([])
 
   useEffect(() => {
     const cutoffSec = Math.floor(gameDate / 1000)
@@ -68,7 +67,8 @@ export default function HistoryHomePage() {
 
   useEffect(() => {
     const cutoffSec = Math.floor(gameDate / 1000)
-    setSyntheticCards(SYNTHETIC_STOCKS.map((stock, idx) => {
+    const stockList = isEnded ? ALTERNATE_STOCKS : SYNTHETIC_STOCKS
+    setSyntheticCards(stockList.map((stock) => {
       const candles = getSyntheticCandles(stock.symbol)
       const currentIdx = candles.findLastIndex((c) => c.time <= cutoffSec)
       const current = candles[currentIdx]
@@ -79,7 +79,7 @@ export default function HistoryHomePage() {
       return { symbol: stock.symbol, name: stock.name, price: current.close, change, changePct, loading: false }
     }))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameDate])
+  }, [gameDate, isEnded])
 
   const gameDateStr = new Date(gameDate).toLocaleDateString('ko-KR', {
     year: 'numeric',
@@ -104,6 +104,19 @@ export default function HistoryHomePage() {
           <StockSearch basePath="/history/stock" />
         </div>
       </section>
+
+      {isEnded && (
+        <Link
+          to="/history/results"
+          className="flex items-center justify-between bg-indigo-600/15 border border-indigo-500/30 rounded-xl px-5 py-4 hover:bg-indigo-600/25 transition-colors"
+        >
+          <div>
+            <p className="text-indigo-300 font-semibold">시뮬레이션이 종료됐습니다</p>
+            <p className="text-indigo-400/70 text-sm mt-0.5">결과 분석 페이지에서 최종 성과를 확인하세요</p>
+          </div>
+          <span className="text-indigo-300 text-lg">→</span>
+        </Link>
+      )}
 
       {kospi.length > 0 && (
         <section>
@@ -130,11 +143,14 @@ export default function HistoryHomePage() {
       <section>
         <div className="flex items-center gap-2 mb-3">
           <h2 className="text-gray-400 text-xs font-semibold uppercase tracking-wider">랜덤 종목</h2>
-          <span className="text-xs text-gray-400">· 상승/하락 종목 혼재, 직접 판단하세요</span>
+          {isEnded
+            ? <span className="text-xs text-indigo-400">· 새 게임에서 거래할 수 있는 종목 미리보기</span>
+            : <span className="text-xs text-gray-400">· 상승/하락 종목 혼재, 직접 판단하세요</span>
+          }
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {syntheticCards.map((c) => (
-            <HistoryStockCard key={c.symbol} data={c} />
+            <HistoryStockCard key={c.symbol} data={c} preview={isEnded} />
           ))}
         </div>
       </section>
@@ -142,12 +158,13 @@ export default function HistoryHomePage() {
   )
 }
 
-function HistoryStockCard({ data }: { data: StockCardData }) {
-  return (
-    <Link
-      to={`/history/stock/${encodeURIComponent(data.symbol)}`}
-      className="block bg-gray-800 hover:bg-gray-750 border border-gray-700 hover:border-gray-600 rounded-xl p-4 transition-all"
-    >
+function HistoryStockCard({ data, preview = false }: { data: StockCardData; preview?: boolean }) {
+  const cardClass = preview
+    ? 'block bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 opacity-70 cursor-default'
+    : 'block bg-gray-800 hover:bg-gray-750 border border-gray-700 hover:border-gray-600 rounded-xl p-4 transition-all'
+
+  const content = (
+    <>
       <div className="flex justify-between items-start mb-2">
         <div>
           <p className="text-white font-semibold text-sm">{data.name}</p>
@@ -176,6 +193,16 @@ function HistoryStockCard({ data }: { data: StockCardData }) {
           </>
         )}
       </div>
+      {preview && (
+        <p className="text-indigo-400/70 text-xs mt-2">새 게임에서 거래 가능</p>
+      )}
+    </>
+  )
+
+  if (preview) return <div className={cardClass}>{content}</div>
+  return (
+    <Link to={`/history/stock/${encodeURIComponent(data.symbol)}`} className={cardClass}>
+      {content}
     </Link>
   )
 }

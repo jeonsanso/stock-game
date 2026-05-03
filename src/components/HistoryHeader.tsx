@@ -44,6 +44,11 @@ export default function HistoryHeader({ totalAsset }: HistoryHeaderProps) {
             <Link to="/history/portfolio" className={`pb-0.5 transition-colors ${isActive('/history/portfolio')}`}>
               포트폴리오
             </Link>
+            {isEnded && (
+              <Link to="/history/results" className={`pb-0.5 transition-colors ${isActive('/history/results')} text-amber-400`}>
+                결과 분석
+              </Link>
+            )}
           </nav>
         </div>
 

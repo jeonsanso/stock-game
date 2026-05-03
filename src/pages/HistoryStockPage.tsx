@@ -2,23 +2,20 @@ import { useEffect, useState, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { fetchCandlesCached, getCandleAt, type CandleBar } from '../api/yahooFinance'
 import { WATCHLIST } from '../api/constants'
-import { SYNTHETIC_STOCKS, getSyntheticCandles, isSynthetic } from '../api/syntheticStocks'
+import { getSyntheticName, getSyntheticCandles, isSynthetic } from '../api/syntheticStocks'
 import { useHistoryStore } from '../store/historyStore'
 import StockChart from '../components/StockChart'
 import HistoryTradePanel from '../components/HistoryTradePanel'
-import InvestorInfo from '../components/InvestorInfo'
 import { formatKRW, formatNumber, formatChangePercent, formatChange, changeColor, changeBg } from '../utils/format'
 
-const symbolNameMap = Object.fromEntries([
-  ...WATCHLIST.map((w) => [w.symbol, w.name]),
-  ...SYNTHETIC_STOCKS.map((w) => [w.symbol, w.name]),
-])
+const watchlistNameMap = Object.fromEntries(WATCHLIST.map((w) => [w.symbol, w.name]))
 
 export default function HistoryStockPage() {
   const { symbol } = useParams<{ symbol: string }>()
   const decoded = symbol ? decodeURIComponent(symbol) : ''
 
   const { gameDate, startDate, tradeHistory } = useHistoryStore()
+
 
   const [allCandles, setAllCandles] = useState<CandleBar[]>([])
   const [loading, setLoading] = useState(true)
@@ -69,7 +66,7 @@ export default function HistoryStockPage() {
       ? ((price - startPrice) / startPrice) * 100
       : null
 
-  const name = symbolNameMap[decoded] ?? decoded
+  const name = isSynthetic(decoded) ? getSyntheticName(decoded) : (watchlistNameMap[decoded] ?? decoded)
   const today = Date.now()
   const isEnded = gameDate >= today
   const [infoOpen, setInfoOpen] = useState(true)
@@ -212,9 +209,6 @@ export default function HistoryStockPage() {
                   startPrice={startPrice}
                   nextDayChangePct={nextDayChangePct}
                 />
-                {currentCandle && (
-                  <InvestorInfo candle={currentCandle} prev={prevCandle} />
-                )}
               </div>
             ) : (
               <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 animate-pulse h-64" />
@@ -250,9 +244,6 @@ export default function HistoryStockPage() {
                 startPrice={startPrice}
                 nextDayChangePct={nextDayChangePct}
               />
-              {currentCandle && (
-                <InvestorInfo candle={currentCandle} prev={prevCandle} />
-              )}
             </div>
           ) : (
             <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 animate-pulse h-64" />

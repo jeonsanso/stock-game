@@ -6,24 +6,29 @@ export interface SyntheticStock {
   sector: string
 }
 
-interface StockConfig {
-  drift: number
-  volatility: number
-  startPrice: number
-}
-
-// 어떤 종목이 상승/하락인지 UI에 노출하지 않음
-const CONFIGS: Record<string, StockConfig> = {
-  SIM001: { drift:  0.0015, volatility: 0.020, startPrice: 25000 }, // 우상향
-  SIM002: { drift: -0.0008, volatility: 0.025, startPrice:  8500 }, // 우하향
-  SIM003: { drift:  0.0008, volatility: 0.018, startPrice: 45000 }, // 우상향
-  SIM004: { drift: -0.0012, volatility: 0.022, startPrice: 12000 }, // 우하향
-  SIM005: { drift:  0.0012, volatility: 0.030, startPrice:  3500 }, // 우상향
-  SIM006: { drift: -0.0006, volatility: 0.020, startPrice: 67000 }, // 우하향
-  SIM007: { drift:  0.0005, volatility: 0.015, startPrice: 18000 }, // 우상향
-  SIM008: { drift: -0.0015, volatility: 0.028, startPrice:  5200 }, // 우하향
-  SIM009: { drift:  0.0010, volatility: 0.022, startPrice: 33000 }, // 우상향
-  SIM010: { drift: -0.0004, volatility: 0.018, startPrice: 42000 }, // 우하향
+const CONFIGS: Record<string, { drift: number; volatility: number; startPrice: number }> = {
+  // 1차 종목 (기본)
+  SIM001: { drift:  0.0015, volatility: 0.020, startPrice: 25000 },
+  SIM002: { drift: -0.0008, volatility: 0.025, startPrice:  8500 },
+  SIM003: { drift:  0.0008, volatility: 0.018, startPrice: 45000 },
+  SIM004: { drift: -0.0012, volatility: 0.022, startPrice: 12000 },
+  SIM005: { drift:  0.0012, volatility: 0.030, startPrice:  3500 },
+  SIM006: { drift: -0.0006, volatility: 0.020, startPrice: 67000 },
+  SIM007: { drift:  0.0005, volatility: 0.015, startPrice: 18000 },
+  SIM008: { drift: -0.0015, volatility: 0.028, startPrice:  5200 },
+  SIM009: { drift:  0.0010, volatility: 0.022, startPrice: 33000 },
+  SIM010: { drift: -0.0004, volatility: 0.018, startPrice: 42000 },
+  // 2차 종목 (시뮬레이션 종료 후 교체)
+  SIM011: { drift:  0.0018, volatility: 0.024, startPrice: 15000 },
+  SIM012: { drift: -0.0010, volatility: 0.019, startPrice: 58000 },
+  SIM013: { drift:  0.0007, volatility: 0.032, startPrice:  4200 },
+  SIM014: { drift: -0.0014, volatility: 0.021, startPrice: 22000 },
+  SIM015: { drift:  0.0020, volatility: 0.026, startPrice:  9800 },
+  SIM016: { drift: -0.0005, volatility: 0.017, startPrice: 72000 },
+  SIM017: { drift:  0.0009, volatility: 0.023, startPrice: 31000 },
+  SIM018: { drift: -0.0011, volatility: 0.029, startPrice:  6600 },
+  SIM019: { drift:  0.0013, volatility: 0.016, startPrice: 48000 },
+  SIM020: { drift: -0.0003, volatility: 0.025, startPrice: 11000 },
 }
 
 export const SYNTHETIC_STOCKS: SyntheticStock[] = [
@@ -38,6 +43,27 @@ export const SYNTHETIC_STOCKS: SyntheticStock[] = [
   { symbol: 'SIM009', name: '디지털플랫폼', sector: 'IT'     },
   { symbol: 'SIM010', name: '한림유통',     sector: '유통'   },
 ]
+
+export const ALTERNATE_STOCKS: SyntheticStock[] = [
+  { symbol: 'SIM011', name: '극동전자',     sector: '전자'   },
+  { symbol: 'SIM012', name: '신한바이오',   sector: '바이오' },
+  { symbol: 'SIM013', name: '대한에너지',   sector: '에너지' },
+  { symbol: 'SIM014', name: '호남건설',     sector: '건설'   },
+  { symbol: 'SIM015', name: '서울IT',       sector: 'IT'     },
+  { symbol: 'SIM016', name: '동북화학',     sector: '화학'   },
+  { symbol: 'SIM017', name: '경기반도체',   sector: '반도체' },
+  { symbol: 'SIM018', name: '인천정밀',     sector: '정밀'   },
+  { symbol: 'SIM019', name: '전남소재',     sector: '소재'   },
+  { symbol: 'SIM020', name: '부산물산',     sector: '유통'   },
+]
+
+const ALL_STOCKS = [...SYNTHETIC_STOCKS, ...ALTERNATE_STOCKS]
+
+const NAME_MAP = Object.fromEntries(ALL_STOCKS.map((s) => [s.symbol, s.name]))
+
+export function getSyntheticName(symbol: string): string {
+  return NAME_MAP[symbol] ?? symbol
+}
 
 function hashString(str: string): number {
   let h = 0

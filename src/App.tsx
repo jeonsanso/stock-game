@@ -9,6 +9,7 @@ import PortfolioPage from './pages/PortfolioPage'
 import HistoryHomePage from './pages/HistoryHomePage'
 import HistoryStockPage from './pages/HistoryStockPage'
 import HistoryPortfolioPage from './pages/HistoryPortfolioPage'
+import HistoryResultsPage from './pages/HistoryResultsPage'
 import { useGameStore } from './store/gameStore'
 import { useHistoryStore } from './store/historyStore'
 import { fetchQuotes, fetchCandlesCached, getPriceAt } from './api/yahooFinance'
@@ -87,6 +88,7 @@ function HistoryLayout() {
         <Route index element={<HistoryHomePage />} />
         <Route path="stock/:symbol" element={<HistoryStockPage />} />
         <Route path="portfolio" element={<HistoryPortfolioPage />} />
+        <Route path="results" element={<HistoryResultsPage />} />
       </Routes>
     </div>
   )

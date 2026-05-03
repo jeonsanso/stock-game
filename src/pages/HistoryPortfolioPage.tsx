@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchCandlesCached, getPriceAt, type CandleBar } from '../api/yahooFinance'
-import { useHistoryStore, type TradeRecord } from '../store/historyStore'
+import { useHistoryStore, type TradeRecord, type Holding } from '../store/historyStore'
 import { formatKRW, formatNumber, formatChangePercent, formatChange, changeColor, changeBg } from '../utils/format'
 import { INITIAL_CASH } from '../api/constants'
 
@@ -82,6 +82,8 @@ export default function HistoryPortfolioPage() {
           </p>
         </div>
       </div>
+
+      <StockPnlSection tradeHistory={tradeHistory} holdings={holdings} priceMap={priceMap} loading={loading} />
 
       <div className="space-y-6">
         <section>
@@ -168,5 +170,85 @@ export default function HistoryPortfolioPage() {
         </section>
       </div>
     </main>
+  )
+}
+
+function StockPnlSection({
+  tradeHistory,
+  holdings,
+  priceMap,
+  loading,
+}: {
+  tradeHistory: TradeRecord[]
+  holdings: Record<string, Holding>
+  priceMap: Record<string, number>
+  loading: boolean
+}) {
+  const symbols = [...new Set(tradeHistory.map((t) => t.symbol))]
+  if (symbols.length === 0) return null
+
+  const rows = symbols.map((sym) => {
+    const trades = tradeHistory.filter((t) => t.symbol === sym)
+    const name = trades[0].name
+    const totalSpent = trades.filter((t) => t.type === 'buy').reduce((s, t) => s + t.total, 0)
+    const totalReceived = trades.filter((t) => t.type === 'sell').reduce((s, t) => s + t.total, 0)
+    const holding = holdings[sym]
+    const currentPrice = priceMap[sym] ?? 0
+    const holdingValue = holding ? currentPrice * holding.quantity : 0
+    const netPnl = totalReceived + holdingValue - totalSpent
+    const pnlPct = totalSpent > 0 ? (netPnl / totalSpent) * 100 : 0
+    const isHolding = !!holding
+    return { sym, name, totalSpent, totalReceived, holdingValue, netPnl, pnlPct, isHolding }
+  })
+
+  return (
+    <section>
+      <h2 className="text-white font-semibold mb-3">종목별 수익</h2>
+      <div className="space-y-2">
+        {rows.map(({ sym, name, totalSpent, holdingValue, netPnl, pnlPct, isHolding }) => {
+          const pos = netPnl >= 0
+          return (
+            <Link
+              key={sym}
+              to={`/history/stock/${encodeURIComponent(sym)}`}
+              className={`flex items-center justify-between rounded-xl px-4 py-3 border transition-colors hover:border-gray-600 ${
+                pos ? 'bg-red-500/5 border-red-500/20' : 'bg-blue-500/5 border-blue-500/20'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div>
+                  <p className="text-white text-sm font-semibold">{name}</p>
+                  <p className="text-gray-400 text-xs mt-0.5">{sym}</p>
+                </div>
+                <span className={`text-xs px-2 py-0.5 rounded-full border ${
+                  isHolding
+                    ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                    : 'bg-gray-700 text-gray-400 border-gray-600'
+                }`}>
+                  {isHolding ? '보유중' : '매도완료'}
+                </span>
+              </div>
+              <div className="text-right">
+                <p className={`text-sm font-bold ${pos ? 'text-red-400' : 'text-blue-400'}`}>
+                  {pos ? '+' : ''}{formatKRW(Math.round(netPnl))}
+                </p>
+                <div className="flex items-center justify-end gap-1.5 mt-0.5">
+                  {isHolding && (
+                    <span className="text-xs text-gray-500">
+                      {loading ? '...' : `평가 ${formatKRW(holdingValue)}`}
+                    </span>
+                  )}
+                  <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${
+                    pos ? 'bg-red-500/15 text-red-400' : 'bg-blue-500/15 text-blue-400'
+                  }`}>
+                    {pos ? '+' : ''}{pnlPct.toFixed(2)}%
+                  </span>
+                </div>
+              </div>
+            </Link>
+          )
+        })}
+      </div>
+    </section>
   )
 }

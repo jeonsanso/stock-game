@@ -140,8 +140,8 @@ export const useHistoryStore = create<HistoryState>()(
 
       toggleFee: () => set({ feeEnabled: !get().feeEnabled }),
 
-      advanceDay: () => set({ gameDate: get().gameDate + 86_400_000 }),
-      advanceTo: (ms) => set({ gameDate: ms }),
+      advanceDay: () => set({ gameDate: Math.min(get().gameDate + 86_400_000, Date.now()) }),
+      advanceTo: (ms) => set({ gameDate: Math.min(ms, Date.now()) }),
 
       saveSnapshot: (name) => {
         const { cash, holdings, tradeHistory, gameDate, saves } = get()
@@ -184,6 +184,13 @@ export const useHistoryStore = create<HistoryState>()(
       },
 
     }),
-    { name: 'history-game-state' },
+    {
+      name: 'history-game-state',
+      onRehydrateStorage: () => (state) => {
+        if (state && state.gameDate > Date.now()) {
+          state.gameDate = Date.now() - SIX_MONTHS_MS
+        }
+      },
+    },
   ),
 )
