@@ -2,6 +2,28 @@ import { useEffect, useRef, useState } from 'react'
 import { createChart, createSeriesMarkers, CandlestickSeries, HistogramSeries, LineSeries, type IChartApi, type ISeriesApi, type SeriesType } from 'lightweight-charts'
 import { fetchCandles, type CandleBar } from '../api/yahooFinance'
 
+function calcRSI(candles: CandleBar[], period = 14): { time: number; value: number }[] {
+  if (candles.length < period + 1) return []
+  const results: { time: number; value: number }[] = []
+  let avgGain = 0
+  let avgLoss = 0
+  for (let i = 1; i <= period; i++) {
+    const diff = candles[i].close - candles[i - 1].close
+    if (diff > 0) avgGain += diff
+    else avgLoss += Math.abs(diff)
+  }
+  avgGain /= period
+  avgLoss /= period
+  results.push({ time: candles[period].time, value: 100 - 100 / (1 + avgGain / (avgLoss || 0.001)) })
+  for (let i = period + 1; i < candles.length; i++) {
+    const diff = candles[i].close - candles[i - 1].close
+    avgGain = (avgGain * (period - 1) + (diff > 0 ? diff : 0)) / period
+    avgLoss = (avgLoss * (period - 1) + (diff < 0 ? Math.abs(diff) : 0)) / period
+    results.push({ time: candles[i].time, value: 100 - 100 / (1 + avgGain / (avgLoss || 0.001)) })
+  }
+  return results
+}
+
 type Range = '1mo' | '3mo' | '6mo' | '1y' | '2y'
 
 interface TradeMark {
@@ -30,12 +52,18 @@ const RANGES: { label: string; value: Range }[] = [
 
 export default function StockChart({ symbol, candles: externalCandles, cutoffDate, trades, startDate, changePct, isFullscreen = false, onToggleFullscreen }: StockChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const rsiContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
+  const rsiChartRef = useRef<IChartApi | null>(null)
+  const rsiSeriesRef = useRef<ISeriesApi<SeriesType> | null>(null)
   const seriesRef = useRef<ISeriesApi<SeriesType> | null>(null)
   const volumeSeriesRef = useRef<ISeriesApi<SeriesType> | null>(null)
   const maSeriesRefs = useRef<ISeriesApi<SeriesType>[]>([])
   const markersPluginRef = useRef<ReturnType<typeof createSeriesMarkers> | null>(null)
   const initialFitDoneRef = useRef(false)
+  const isSyncingRef = useRef(false)
+  const [showRsi, setShowRsi] = useState(true)
+  const [rsiValue, setRsiValue] = useState<number | null>(null)
   const [range, setRange] = useState<Range>('3mo')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -103,17 +131,70 @@ export default function StockChart({ symbol, candles: externalCandles, cutoffDat
     })
 
     const resizeObserver = new ResizeObserver(() => {
-      if (containerRef.current && chartRef.current) {
+      if (containerRef.current && chartRef.current)
         chartRef.current.applyOptions({ width: containerRef.current.clientWidth })
-      }
+      if (rsiContainerRef.current && rsiChartRef.current)
+        rsiChartRef.current.applyOptions({ width: rsiContainerRef.current.clientWidth })
     })
 
     resizeObserver.observe(containerRef.current)
 
+    // RSI 차트
+    if (rsiContainerRef.current) {
+      rsiChartRef.current = createChart(rsiContainerRef.current, {
+        layout: { background: { color: '#111827' }, textColor: '#9CA3AF' },
+        grid: { vertLines: { color: '#1F2937' }, horzLines: { color: '#1F2937' } },
+        crosshair: { vertLine: { color: '#6366F1' }, horzLine: { color: '#6366F1' } },
+        rightPriceScale: { borderColor: '#374151', scaleMargins: { top: 0.1, bottom: 0.1 } },
+        timeScale: { borderColor: '#374151', timeVisible: true },
+        width: rsiContainerRef.current.clientWidth,
+        height: 120,
+        handleScroll: false,
+        handleScale: false,
+      })
+      rsiSeriesRef.current = rsiChartRef.current.addSeries(LineSeries, {
+        color: '#818CF8',
+        lineWidth: 2,
+        lastValueVisible: false,
+        priceLineVisible: false,
+      })
+      resizeObserver.observe(rsiContainerRef.current)
+    }
+
+    // 시간축 동기화 (메인 ↔ RSI)
+    chartRef.current.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+      if (isSyncingRef.current || !range) return
+      isSyncingRef.current = true
+      rsiChartRef.current?.timeScale().setVisibleLogicalRange(range)
+      isSyncingRef.current = false
+    })
+    rsiChartRef.current?.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+      if (isSyncingRef.current || !range) return
+      isSyncingRef.current = true
+      chartRef.current?.timeScale().setVisibleLogicalRange(range)
+      isSyncingRef.current = false
+    })
+
+    // 크로스헤어 동기화 + RSI 값 표시
+    chartRef.current.subscribeCrosshairMove((param) => {
+      if (!rsiSeriesRef.current || !rsiChartRef.current) return
+      if (param.time) {
+        const rsiData = param.seriesData.get(rsiSeriesRef.current as ISeriesApi<SeriesType>)
+        if (rsiData && 'value' in rsiData) setRsiValue(Math.round((rsiData as { value: number }).value))
+        try { rsiChartRef.current.setCrosshairPosition(0, param.time, rsiSeriesRef.current) } catch { /* 데이터 없는 시점 무시 */ }
+      } else {
+        setRsiValue(null)
+        rsiChartRef.current.clearCrosshairPosition()
+      }
+    })
+
     return () => {
       resizeObserver.disconnect()
       chartRef.current?.remove()
+      rsiChartRef.current?.remove()
       chartRef.current = null
+      rsiChartRef.current = null
+      rsiSeriesRef.current = null
       seriesRef.current = null
       volumeSeriesRef.current = null
       maSeriesRefs.current = []
@@ -186,6 +267,14 @@ export default function StockChart({ symbol, candles: externalCandles, cutoffDat
     seriesRef.current.setData(formatted)
     volumeSeriesRef.current.setData(volumeFormatted)
     maSeriesRefs.current.forEach((s, i) => s.setData(calcMA(filtered, MA_CONFIGS[i].period)))
+
+    if (rsiSeriesRef.current) {
+      const rsiData = calcRSI(filtered).map((d) => ({
+        time: d.time as unknown as import('lightweight-charts').Time,
+        value: d.value,
+      }))
+      rsiSeriesRef.current.setData(rsiData)
+    }
 
     if (isHistoryMode && formatted.length > 0) {
       type Marker = Parameters<typeof createSeriesMarkers>[1][number]
@@ -294,6 +383,12 @@ export default function StockChart({ symbol, candles: externalCandles, cutoffDat
             <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-[#A78BFA]" />MA20</span>
             <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-[#34D399]" />MA60</span>
           </div>
+          <button
+            onClick={() => setShowRsi((v) => !v)}
+            className={`text-xs px-2 py-0.5 rounded border transition-colors border-l border-gray-700 ml-1 ${showRsi ? 'bg-indigo-600/30 border-indigo-500/40 text-indigo-300' : 'border-gray-700 text-gray-500 hover:text-gray-300'}`}
+          >
+            RSI
+          </button>
           <div className="flex items-center gap-1.5 text-xs text-gray-400 border-l border-gray-700 pl-3">
             <span>거래량</span>
             <input
@@ -355,6 +450,29 @@ export default function StockChart({ symbol, candles: externalCandles, cutoffDat
           </div>
         )}
       </div>
+
+      {showRsi && (
+        <div className="border-t border-gray-800">
+          <div className="flex items-center gap-3 px-4 py-1.5 text-xs text-gray-500">
+            <span className="text-indigo-400 font-medium">RSI(14)</span>
+            {rsiValue != null && (
+              <span className={`font-bold ${rsiValue >= 70 ? 'text-red-400' : rsiValue <= 30 ? 'text-blue-400' : 'text-indigo-300'}`}>
+                {rsiValue}
+                {rsiValue >= 70 ? ' 과매수' : rsiValue <= 30 ? ' 과매도' : ''}
+              </span>
+            )}
+            <span className="ml-auto text-gray-600">70 과매수 · 30 과매도</span>
+          </div>
+          <div className="relative">
+            <div ref={rsiContainerRef} />
+            {/* 70/30 기준선 오버레이 */}
+            <div className="absolute inset-0 pointer-events-none">
+              <div className="absolute w-full border-t border-red-500/20" style={{ top: '10%' }} />
+              <div className="absolute w-full border-t border-blue-500/20" style={{ top: '90%' }} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

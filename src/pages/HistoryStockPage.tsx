@@ -15,7 +15,7 @@ export default function HistoryStockPage() {
   const decoded = symbol ? decodeURIComponent(symbol) : ''
   const navigate = useNavigate()
 
-  const { stockPositions, startDate, tradeHistory, completeStock, customSymbols, addCustomSymbol } = useHistoryStore()
+  const { stockPositions, startDate, tradeHistory, holdings, sell, completeStock, customSymbols, addCustomSymbol } = useHistoryStore()
   const gameDate = stockPositions[decoded] ?? startDate
   const location = useLocation()
   const locationName = (location.state as { name?: string } | null)?.name
@@ -99,9 +99,14 @@ export default function HistoryStockPage() {
   })
 
   const handleComplete = useCallback(() => {
+    // 보유 주식 자동 전량 매도 (수수료 없음)
+    const holding = holdings[decoded]
+    if (holding && price != null) {
+      sell(decoded, holding.name, price, holding.quantity, true)
+    }
     completeStock(decoded)
     navigate(`/history/results/${encodeURIComponent(decoded)}`)
-  }, [decoded, completeStock, navigate])
+  }, [decoded, holdings, price, sell, completeStock, navigate])
 
   return (
     <main className="max-w-6xl mx-auto px-4 py-6">

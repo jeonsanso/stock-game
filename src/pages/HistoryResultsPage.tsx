@@ -23,9 +23,9 @@ function InfoTip({ text }: { text: string }) {
         ?
       </button>
       {show && (
-        <div className="absolute left-0 bottom-6 z-20 w-64 bg-gray-800 border border-gray-600 rounded-xl px-3 py-2.5 text-xs text-gray-300 leading-relaxed shadow-2xl pointer-events-none">
+        <span className="absolute left-0 bottom-6 z-20 w-64 bg-gray-800 border border-gray-600 rounded-xl px-3 py-2.5 text-xs text-gray-300 leading-relaxed shadow-2xl pointer-events-none block">
           {text}
-        </div>
+        </span>
       )}
     </span>
   )
@@ -582,19 +582,26 @@ export default function HistoryResultsPage() {
             <h2 className="text-white font-semibold mb-3">전체 거래 내역</h2>
             <div className="space-y-2">
               {[...symbolTrades].reverse().map((t) => (
-                <div key={t.id} className="flex items-center justify-between bg-gray-900 border border-gray-800 rounded-xl px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${t.type === 'buy' ? 'bg-red-500/10 text-red-400' : 'bg-blue-500/10 text-blue-400'}`}>
-                      {t.type === 'buy' ? '매수' : '매도'}
-                    </span>
-                    <div>
-                      <p className="text-white text-sm">{t.quantity}주 @ {formatKRW(t.price)}</p>
-                      <p className="text-gray-400 text-xs">{new Date(t.timestamp).toLocaleDateString('ko-KR')}</p>
+                <div key={t.id} className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${t.type === 'buy' ? 'bg-red-500/10 text-red-400' : 'bg-blue-500/10 text-blue-400'}`}>
+                        {t.type === 'buy' ? '매수' : '매도'}
+                      </span>
+                      <div>
+                        <p className="text-white text-sm">{t.quantity}주 @ {formatKRW(t.price)}</p>
+                        <p className="text-gray-400 text-xs">{new Date(t.timestamp).toLocaleDateString('ko-KR')}</p>
+                      </div>
                     </div>
+                    <p className={`text-sm font-semibold ${t.type === 'buy' ? 'text-red-400' : 'text-blue-400'}`}>
+                      {t.type === 'buy' ? '-' : '+'}{formatKRW(t.total)}
+                    </p>
                   </div>
-                  <p className={`text-sm font-semibold ${t.type === 'buy' ? 'text-red-400' : 'text-blue-400'}`}>
-                    {t.type === 'buy' ? '-' : '+'}{formatKRW(t.total)}
-                  </p>
+                  {t.note && (
+                    <p className="mt-2 text-xs text-gray-400 bg-gray-800 rounded-lg px-3 py-1.5 border-l-2 border-indigo-500/50">
+                      {t.note}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>

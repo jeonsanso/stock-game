@@ -78,6 +78,8 @@ export default function HistoryPortfolioPage() {
         </div>
       </div>
 
+      <TradeStatsSection tradeHistory={tradeHistory} holdings={holdings} priceMap={priceMap} />
+
       <StockPnlSection tradeHistory={tradeHistory} holdings={holdings} priceMap={priceMap} loading={loading} />
 
       <div className="space-y-6">
@@ -165,6 +167,81 @@ export default function HistoryPortfolioPage() {
         </section>
       </div>
     </main>
+  )
+}
+
+function TradeStatsSection({
+  tradeHistory,
+  holdings,
+  priceMap,
+}: {
+  tradeHistory: TradeRecord[]
+  holdings: Record<string, Holding>
+  priceMap: Record<string, number>
+}) {
+  const symbols = [...new Set(tradeHistory.map((t) => t.symbol))]
+  if (symbols.length === 0) return null
+
+  const stockStats = symbols.map((sym) => {
+    const trades = tradeHistory.filter((t) => t.symbol === sym)
+    const buys = trades.filter((t) => t.type === 'buy')
+    const sells = trades.filter((t) => t.type === 'sell')
+    const totalSpent = buys.reduce((s, t) => s + t.total, 0)
+    const totalReceived = sells.reduce((s, t) => s + t.total, 0)
+    const holding = holdings[sym]
+    const holdingValue = holding ? (priceMap[sym] ?? holding.avgPrice) * holding.quantity : 0
+    const netPnl = totalReceived + holdingValue - totalSpent
+    const pnlPct = totalSpent > 0 ? (netPnl / totalSpent) * 100 : 0
+    const name = trades[0].name
+    return { sym, name, pnlPct, netPnl, tradeCount: trades.length }
+  })
+
+  const tradedStocks = stockStats.filter((s) => Math.abs(s.netPnl) > 0 || s.tradeCount > 0)
+  if (tradedStocks.length < 2) return null
+
+  const winners = tradedStocks.filter((s) => s.netPnl > 0).length
+  const losers  = tradedStocks.filter((s) => s.netPnl < 0).length
+  const winRate = tradedStocks.length > 0 ? (winners / tradedStocks.length) * 100 : 0
+  const avgReturn = tradedStocks.reduce((s, r) => s + r.pnlPct, 0) / tradedStocks.length
+  const best  = tradedStocks.reduce((a, b) => a.pnlPct > b.pnlPct ? a : b)
+  const worst = tradedStocks.reduce((a, b) => a.pnlPct < b.pnlPct ? a : b)
+  const totalTrades = tradeHistory.length
+
+  return (
+    <section className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+      <h2 className="text-white font-semibold mb-4">트레이딩 통계</h2>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        <div className="bg-gray-800 rounded-xl px-3 py-2.5">
+          <p className="text-gray-400 text-xs mb-1">승률</p>
+          <p className={`text-lg font-bold ${winRate >= 50 ? 'text-red-400' : 'text-blue-400'}`}>{winRate.toFixed(0)}%</p>
+          <p className="text-gray-500 text-xs">{winners}승 {losers}패</p>
+        </div>
+        <div className="bg-gray-800 rounded-xl px-3 py-2.5">
+          <p className="text-gray-400 text-xs mb-1">평균 수익률</p>
+          <p className={`text-lg font-bold ${avgReturn >= 0 ? 'text-red-400' : 'text-blue-400'}`}>
+            {avgReturn >= 0 ? '+' : ''}{avgReturn.toFixed(2)}%
+          </p>
+          <p className="text-gray-500 text-xs">종목당 평균</p>
+        </div>
+        <div className="bg-gray-800 rounded-xl px-3 py-2.5">
+          <p className="text-gray-400 text-xs mb-1">최고 종목</p>
+          <p className="text-red-400 text-sm font-bold">{best.name}</p>
+          <p className="text-red-400 text-xs">+{best.pnlPct.toFixed(2)}%</p>
+        </div>
+        <div className="bg-gray-800 rounded-xl px-3 py-2.5">
+          <p className="text-gray-400 text-xs mb-1">최저 종목</p>
+          <p className="text-blue-400 text-sm font-bold">{worst.name}</p>
+          <p className="text-blue-400 text-xs">{worst.pnlPct.toFixed(2)}%</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-4 text-xs text-gray-500 border-t border-gray-800 pt-3">
+        <span>총 거래 횟수 <span className="text-white">{totalTrades}회</span></span>
+        <span>분석 종목 <span className="text-white">{tradedStocks.length}개</span></span>
+        {winRate >= 60 && <span className="text-green-400">▲ 승률 양호</span>}
+        {avgReturn < 0 && <span className="text-orange-400">⚠ 평균 손실 — 손절 전략을 점검해보세요</span>}
+        {winRate < 40 && tradedStocks.length >= 3 && <span className="text-orange-400">⚠ 낮은 승률 — 진입 타이밍 개선이 필요합니다</span>}
+      </div>
+    </section>
   )
 }
 

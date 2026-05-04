@@ -22,11 +22,13 @@ export default function HistoryTradePanel({
   const { cash, holdings, buy, sell, advanceStockTo, completedStocks, feeEnabled, toggleFee, tradeHistory } = useHistoryStore()
   const [mode, setMode] = useState<'buy' | 'sell'>('buy')
   const [qty, setQty] = useState('')
+  const [note, setNote] = useState('')
   const [message, setMessage] = useState<{ text: string; ok: boolean; changePct?: number } | null>(null)
 
   const isCompleted = completedStocks.includes(symbol)
 
   const holding = holdings[symbol]
+
   const quantity = parseInt(qty) || 0
   const safePrice = price ?? 0
   const total = safePrice * quantity
@@ -44,8 +46,8 @@ export default function HistoryTradePanel({
     }
     const err =
       mode === 'buy'
-        ? buy(symbol, name, safePrice, quantity)
-        : sell(symbol, name, safePrice, quantity)
+        ? buy(symbol, name, safePrice, quantity, note)
+        : sell(symbol, name, safePrice, quantity, false, note)
     if (err) {
       setMessage({ text: err, ok: false })
       setTimeout(() => setMessage(null), 3000)
@@ -54,6 +56,7 @@ export default function HistoryTradePanel({
       const nextDate = new Date(nextTradingDateMs).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })
       setMessage({ text: `${mode === 'buy' ? '매수 완료' : '매도 완료'} · ${nextDate}로 이동`, ok: true, changePct: nextDayChangePct ?? undefined })
       setQty('')
+      setNote('')
     }
   }
 
@@ -82,7 +85,7 @@ export default function HistoryTradePanel({
     return (
       <div className="bg-gray-900 rounded-xl border border-indigo-500/30 p-6 text-center space-y-3">
         <p className="text-indigo-300 font-bold text-lg">현재 날짜 도달</p>
-        <p className="text-gray-400 text-sm">이 종목의 데이터가 오늘까지 도달했습니다.</p>
+        <p className="text-gray-400 text-sm">보유 주식이 수수료 없이 자동 매도됩니다.</p>
         <button
           onClick={onComplete}
           className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl transition-colors"
@@ -195,6 +198,14 @@ export default function HistoryTradePanel({
             ))}
           </div>
         </div>
+
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="거래 이유 메모 (선택) — 나중에 복기할 때 도움이 됩니다"
+          rows={2}
+          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500 transition-colors resize-none"
+        />
 
         <div className="pt-1 border-t border-gray-800 space-y-1.5">
           {feeEnabled && fee > 0 && (

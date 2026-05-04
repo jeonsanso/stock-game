@@ -18,6 +18,7 @@ export interface TradeRecord {
   price: number
   total: number
   timestamp: number
+  note?: string
 }
 
 export interface SavedSnapshot {
@@ -44,8 +45,8 @@ interface HistoryState {
   feeEnabled: boolean
   saves: SavedSnapshot[]
 
-  buy: (symbol: string, name: string, price: number, quantity: number) => string | null
-  sell: (symbol: string, name: string, price: number, quantity: number) => string | null
+  buy: (symbol: string, name: string, price: number, quantity: number, note?: string) => string | null
+  sell: (symbol: string, name: string, price: number, quantity: number, noFee?: boolean, note?: string) => string | null
   toggleFee: () => void
   advanceStockTo: (symbol: string, ms: number) => void
   completeStock: (symbol: string) => void
@@ -70,7 +71,7 @@ export const useHistoryStore = create<HistoryState>()(
       feeEnabled: false,
       saves: [],
 
-      buy: (symbol, name, price, quantity) => {
+      buy: (symbol, name, price, quantity, note?) => {
         const { cash, holdings, tradeHistory, stockPositions, startDate, feeEnabled } = get()
         const stockDate = stockPositions[symbol] ?? startDate
         const feeRate = feeEnabled ? BUY_FEE_RATE : 0
@@ -95,6 +96,7 @@ export const useHistoryStore = create<HistoryState>()(
           price,
           total: totalWithFee,
           timestamp: stockDate,
+          note: note?.trim() || undefined,
         }
 
         set({
@@ -108,14 +110,14 @@ export const useHistoryStore = create<HistoryState>()(
         return null
       },
 
-      sell: (symbol, name, price, quantity) => {
+      sell: (symbol, name, price, quantity, noFee = false, note?) => {
         const { cash, holdings, tradeHistory, stockPositions, startDate, feeEnabled } = get()
         const stockDate = stockPositions[symbol] ?? startDate
         const holding = holdings[symbol]
         if (!holding || holding.quantity < quantity) return '보유 수량이 부족합니다.'
         if (quantity <= 0) return '수량을 1주 이상 입력하세요.'
 
-        const feeRate = feeEnabled ? SELL_FEE_RATE : 0
+        const feeRate = (!noFee && feeEnabled) ? SELL_FEE_RATE : 0
         const total = price * quantity
         const fee = Math.round(total * feeRate)
         const totalAfterFee = total - fee
@@ -137,6 +139,7 @@ export const useHistoryStore = create<HistoryState>()(
           price,
           total: totalAfterFee,
           timestamp: stockDate,
+          note: note?.trim() || undefined,
         }
 
         set({
