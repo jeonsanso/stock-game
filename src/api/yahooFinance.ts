@@ -1,8 +1,7 @@
-// 네이버 증권 API (검증된 엔드포인트)
-// 시세(현재가): GET /api/naver/api/stock/{code}/basic
-// 시세(OHLCV):  GET /api/naver/api/stock/{code}/integration  (totalInfos)
-// 차트:         GET /api/naver-chart/sise.nhn?symbol={code}&timeframe=day&count=N&requestType=0  (XML)
-// 검색:         GET /api/naver-search/ac?q={query}&target=stock,index
+// 캔들 데이터: 백엔드 DB (GET {CANDLES_BASE}/api/candles/{code}?days=N)
+// 검색/재무:   네이버 증권 API (Vite 프록시 경유)
+
+const CANDLES_BASE = import.meta.env.VITE_API_BASE ?? ''
 
 function toCode(symbol: string): string {
   return symbol.split('.')[0]
@@ -107,7 +106,7 @@ export async function fetchQuotes(symbols: string[]): Promise<QuoteResult[]> {
     .map((r) => r.value)
 }
 
-const RANGE_COUNT: Record<string, number> = {
+const RANGE_DAYS: Record<string, number> = {
   '1mo': 30,
   '3mo': 90,
   '6mo': 180,
@@ -120,39 +119,10 @@ export async function fetchCandles(
   range: '1mo' | '3mo' | '6mo' | '1y' | '2y' = '3mo',
 ): Promise<CandleBar[]> {
   const code = toCode(symbol)
-  const count = RANGE_COUNT[range] ?? 90
-  const url = `/api/naver-chart/sise.nhn?symbol=${code}&timeframe=day&count=${count}&requestType=0`
-
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`chart ${res.status}`)
-  const xml = await res.text()
-
-  const parser = new DOMParser()
-  const doc = parser.parseFromString(xml, 'text/xml')
-  const items = doc.querySelectorAll('item')
-
-  const bars: CandleBar[] = []
-  items.forEach((item) => {
-    const raw = item.getAttribute('data')
-    if (!raw) return
-    const [dateStr, openStr, highStr, lowStr, closeStr, volumeStr] = raw.split('|')
-    const y = Number(dateStr.slice(0, 4))
-    const m = Number(dateStr.slice(4, 6)) - 1
-    const d = Number(dateStr.slice(6, 8))
-    const open = Number(openStr)
-    const close = Number(closeStr)
-    if (!open || !close) return
-    bars.push({
-      time: Math.floor(new Date(y, m, d, 9, 0, 0).getTime() / 1000),
-      open,
-      high: Number(highStr),
-      low: Number(lowStr),
-      close,
-      volume: Number(volumeStr),
-    })
-  })
-
-  return bars.sort((a, b) => a.time - b.time)
+  const days = RANGE_DAYS[range] ?? 90
+  const res = await fetch(`${CANDLES_BASE}/api/candles/${code}?days=${days}`)
+  if (!res.ok) throw new Error(`candles ${res.status}`)
+  return res.json() as Promise<CandleBar[]>
 }
 
 // 캔들 배열에서 dateMs(Unix ms) 이전 마지막 캔들의 close 반환 (주말/휴장일 처리 포함)

@@ -7,11 +7,13 @@ FastAPI 주식 예측 서버
 """
 
 import logging
+import sqlite3
 import subprocess
 import sys
 import threading
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -50,6 +52,7 @@ logging.basicConfig(
 # ── 앱 상태 ───────────────────────────────────────────────────
 
 BACKEND_ROOT = Path(__file__).parent.parent
+DB_PATH = BACKEND_ROOT / "data" / "stocks.db"
 
 class _State:
     booster: Optional[lgb.Booster] = None
@@ -296,7 +299,8 @@ async def get_model_info() -> Dict[str, Any]:
 @app.get("/api/market/trend", summary="시장 추세")
 async def market_trend_endpoint() -> Dict[str, Any]:
     """최근 20거래일 유동성 종목 중앙값 수익률 기반 시장 추세 (강세/횡보/약세)."""
-    return get_market_trend(days=30)
+    target_date = _get_date(None)
+    return _get_market_trend_cached(target_date)
 
 
 @app.get("/api/daily/summary", summary="일일 아침 요약")
@@ -306,7 +310,7 @@ async def daily_summary() -> Dict[str, Any]:
     target_date = _get_date(None)
     cached = _state.predictions_cache.get(target_date, [])
     top3 = cached[:3]
-    market = get_market_trend(days=30)
+    market = _get_market_trend_cached(target_date)
 
     if market["trend"] == "bear":
         caution = "약세장 진행 중 — 추천 신호 신뢰도 낮음. 포지션 최소화 권장."
@@ -325,6 +329,38 @@ async def daily_summary() -> Dict[str, Any]:
         "model_confidence": model_conf,
         "caution":          caution,
     }
+
+
+@app.get("/api/candles/{symbol}", summary="종목 일봉 캔들 데이터")
+async def get_candles(
+    symbol: str,
+    days: int = Query(default=365, ge=30, le=730, description="조회 일수"),
+) -> List[Dict]:
+    """prices 테이블에서 OHLCV 일봉을 반환. time은 UTC 자정 Unix 초."""
+    code = symbol.split(".")[0]
+    if not DB_PATH.exists():
+        raise HTTPException(status_code=503, detail="DB 파일 없음")
+    with sqlite3.connect(DB_PATH) as conn:
+        rows = conn.execute(
+            "SELECT date, open, high, low, close, volume FROM prices "
+            "WHERE symbol = ? ORDER BY date DESC LIMIT ?",
+            (code, days),
+        ).fetchall()
+    if not rows:
+        raise HTTPException(status_code=404, detail=f"종목 {code} 데이터 없음")
+    result = []
+    for date_str, open_, high, low, close, volume in reversed(rows):
+        y, m, d = int(date_str[:4]), int(date_str[4:6]), int(date_str[6:8])
+        unix_sec = int(datetime(y, m, d, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+        result.append({
+            "time": unix_sec,
+            "open": float(open_),
+            "high": float(high),
+            "low": float(low),
+            "close": float(close),
+            "volume": int(volume) if volume is not None else 0,
+        })
+    return result
 
 
 @app.get("/health", summary="헬스 체크")

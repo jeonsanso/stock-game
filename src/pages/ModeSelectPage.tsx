@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom'
-import { useGameStore } from '../store/gameStore'
 import { useHistoryStore } from '../store/historyStore'
 import { formatKRW, formatChangePercent, changeColor } from '../utils/format'
 import { INITIAL_CASH } from '../api/constants'
@@ -18,13 +17,8 @@ function useAiServerStatus() {
 }
 
 export default function ModeSelectPage() {
-  const realtime = useGameStore()
   const history = useHistoryStore()
   const aiOnline = useAiServerStatus()
-
-  const realtimeProfitRate = ((realtime.cash + Object.values(realtime.holdings).reduce(
-    (s, h) => s + h.avgPrice * h.quantity, 0
-  ) - INITIAL_CASH) / INITIAL_CASH) * 100
 
   const historyProfitRate = ((history.cash + Object.values(history.holdings).reduce(
     (s, h) => s + h.avgPrice * h.quantity, 0
@@ -40,7 +34,6 @@ export default function ModeSelectPage() {
   })
 
   const historyTradeCount = history.tradeHistory.length
-  const realtimeTradeCount = realtime.tradeHistory.length
   const today = Date.now()
   const historyEnded = historyDateMs >= today
 
@@ -52,44 +45,7 @@ export default function ModeSelectPage() {
           <p className="text-gray-400 text-sm">플레이할 모드를 선택하세요</p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* 실시간 모의투자 카드 */}
-          <Link
-            to="/realtime"
-            className="group block bg-gray-900 border border-gray-800 hover:border-indigo-500/50 rounded-2xl p-6 transition-all hover:shadow-lg hover:shadow-indigo-500/10"
-          >
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center text-xl">
-                📡
-              </div>
-              <div>
-                <h2 className="text-white font-bold text-lg">실시간 모의투자</h2>
-                <p className="text-gray-400 text-xs">현재가 기반</p>
-              </div>
-            </div>
-
-            <p className="text-gray-400 text-sm mb-5 leading-relaxed">
-              네이버 증권 실시간 시세로 지금 이 순간의 한국 주식 시장에서 투자 연습을 합니다.
-            </p>
-
-            {realtimeTradeCount > 0 ? (
-              <div className="bg-gray-800/60 rounded-xl px-4 py-3 space-y-1">
-                <p className="text-gray-400 text-xs">진행 중인 게임</p>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-300 text-sm">{realtimeTradeCount}회 거래</span>
-                  <span className={`text-sm font-semibold ${changeColor(realtimeProfitRate)}`}>
-                    {formatChangePercent(realtimeProfitRate)}
-                  </span>
-                </div>
-                <p className="text-gray-400 text-xs">이어하기 →</p>
-              </div>
-            ) : (
-              <div className="bg-gray-800/60 rounded-xl px-4 py-3">
-                <p className="text-gray-400 text-xs">시작 전 · 초기 자본 {formatKRW(INITIAL_CASH)}</p>
-              </div>
-            )}
-          </Link>
-
+        <div className="grid grid-cols-1 gap-4">
           {/* 역사 시뮬레이션 카드 */}
           <Link
             to="/history"
