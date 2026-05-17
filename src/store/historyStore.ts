@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { INITIAL_CASH, BUY_FEE_RATE, SELL_FEE_RATE } from '../api/constants'
+import { syncTrades } from '../api/historyApi'
 
 export interface Holding {
   symbol: string
@@ -107,6 +108,7 @@ export const useHistoryStore = create<HistoryState>()(
           },
           tradeHistory: [record, ...tradeHistory],
         })
+        syncTrades([record]).catch(() => {})
         return null
       },
 
@@ -147,6 +149,7 @@ export const useHistoryStore = create<HistoryState>()(
           holdings: newHoldings,
           tradeHistory: [record, ...tradeHistory],
         })
+        syncTrades([record]).catch(() => {})
         return null
       },
 

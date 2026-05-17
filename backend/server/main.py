@@ -19,12 +19,16 @@ from typing import Any, Dict, List, Optional
 
 import lightgbm as lgb
 from fastapi import FastAPI, HTTPException, Query
+from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from data.db import init_db
 from concentration_filter import RecommendationLog, filter_cooldown
 from disclosure_analysis import analyze_risks
 from disclosure_filter import filter_risky_predictions
+from history_trader import sync_trades as _sync_trades, get_trades as _get_trades
 from paper_trader import (
     record_recommendations,
     close_expired_trades,
@@ -78,6 +82,7 @@ _logged_dates: set[str] = set()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    init_db()
     logger.info("서버 시작 — 모델 로드 중...")
     try:
         _state.booster, _state.model_dir = load_model("target_5d")
@@ -445,6 +450,24 @@ async def start_retrain(
 @app.get("/api/admin/retrain/status", summary="재학습 진행 상태")
 async def retrain_status() -> Dict[str, Any]:
     return _retrain_status()
+
+
+# ── 역사 시뮬레이션 거래 이력 ─────────────────────────────────
+
+class _HistorySyncBody(BaseModel):
+    session_id: str
+    trades: List[Dict[str, Any]]
+
+
+@app.post("/api/history/sync", summary="역사 시뮬레이션 거래 이력 동기화")
+async def history_sync(body: _HistorySyncBody) -> Dict[str, int]:
+    inserted = _sync_trades(body.session_id, body.trades)
+    return {"inserted": inserted, "total": len(body.trades)}
+
+
+@app.get("/api/history/trades", summary="역사 시뮬레이션 거래 이력 조회")
+async def history_trades(session_id: str = Query(..., description="브라우저 세션 UUID")) -> List[Dict[str, Any]]:
+    return _get_trades(session_id)
 
 
 # ── 모의투자 ──────────────────────────────────────────────────

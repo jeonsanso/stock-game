@@ -3,10 +3,11 @@ import { Link } from 'react-router-dom'
 import { fetchCandlesCached, fetchFinanceSummary, type FinanceSummary } from '../api/yahooFinance'
 import { WATCHLIST } from '../api/constants'
 import { SYNTHETIC_STOCKS, ALTERNATE_STOCKS } from '../api/syntheticStocks'
-import { useHistoryStore } from '../store/historyStore'
+import { useHistoryStore, type TradeRecord } from '../store/historyStore'
 import { formatKRW, formatChange, formatChangePercent, changeColor, changeBg, formatProfit } from '../utils/format'
 import StockSearch from '../components/StockSearch'
 import SaveLoadPanel from '../components/SaveLoadPanel'
+import { syncTrades, loadTrades, isMigrated, markMigrated } from '../api/historyApi'
 
 const ALL_SYNTHETIC = [...SYNTHETIC_STOCKS, ...ALTERNATE_STOCKS]
 
@@ -21,12 +22,34 @@ interface StockCardData {
 }
 
 export default function HistoryHomePage() {
-  const { stockPositions, startDate, completedStocks, customSymbols, removeCustomSymbol } = useHistoryStore()
+  const { stockPositions, startDate, completedStocks, customSymbols, removeCustomSymbol, tradeHistory } = useHistoryStore()
   const [cards, setCards] = useState<StockCardData[]>(
     WATCHLIST.map((w) => ({ symbol: w.symbol, name: w.name, price: 0, change: 0, changePct: 0, loading: true })),
   )
   const [syntheticCards, setSyntheticCards] = useState<StockCardData[]>([])
   const [customCards, setCustomCards] = useState<StockCardData[]>([])
+  const [archiveTrades, setArchiveTrades] = useState<TradeRecord[]>([])
+  const [archiveOpen, setArchiveOpen] = useState(false)
+
+  // 최초 1회: 기존 로컬 데이터 마이그레이션
+  useEffect(() => {
+    if (!isMigrated() && tradeHistory.length > 0) {
+      syncTrades(tradeHistory)
+        .then(() => markMigrated())
+        .catch(() => {})
+    } else if (!isMigrated()) {
+      markMigrated()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // 아카이브 섹션 열릴 때 서버에서 전체 이력 로드
+  useEffect(() => {
+    if (!archiveOpen) return
+    loadTrades()
+      .then(setArchiveTrades)
+      .catch(() => {})
+  }, [archiveOpen])
 
   const activeStocks = ALL_SYNTHETIC.filter((s) => !completedStocks.includes(s.symbol)).slice(0, 10)
 
@@ -193,6 +216,53 @@ export default function HistoryHomePage() {
             {syntheticCards.map((c) => (
               <HistoryStockCard key={c.symbol} data={c} />
             ))}
+          </div>
+        )}
+      </section>
+      <section>
+        <button
+          onClick={() => setArchiveOpen((v) => !v)}
+          className="w-full flex items-center justify-between text-gray-400 text-xs font-semibold uppercase tracking-wider hover:text-gray-200 transition-colors"
+        >
+          <span>전체 거래 이력 (백엔드 아카이브)</span>
+          <span>{archiveOpen ? '▲ 접기' : '▼ 펼치기'}</span>
+        </button>
+        {archiveOpen && (
+          <div className="mt-3 space-y-2">
+            {archiveTrades.length === 0 ? (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 text-center text-gray-500 text-sm">
+                저장된 거래 이력이 없습니다.
+              </div>
+            ) : (
+              <>
+                <p className="text-gray-500 text-xs">총 {archiveTrades.length}건 · 초기화 후에도 유지됩니다</p>
+                <div className="space-y-1.5 max-h-96 overflow-y-auto">
+                  {[...archiveTrades].reverse().map((t) => (
+                    <div
+                      key={t.id}
+                      className="flex items-center justify-between bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${
+                          t.type === 'buy' ? 'bg-red-500/10 text-red-400' : 'bg-blue-500/10 text-blue-400'
+                        }`}>
+                          {t.type === 'buy' ? '매수' : '매도'}
+                        </span>
+                        <div>
+                          <p className="text-white text-sm font-medium">{t.name}</p>
+                          <p className="text-gray-400 text-xs">
+                            {t.quantity}주 @ {formatKRW(t.price)} · {new Date(t.timestamp).toLocaleDateString('ko-KR')}
+                          </p>
+                        </div>
+                      </div>
+                      <p className={`text-sm font-semibold ${t.type === 'buy' ? 'text-red-400' : 'text-blue-400'}`}>
+                        {t.type === 'buy' ? '-' : '+'}{formatKRW(t.total)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         )}
       </section>

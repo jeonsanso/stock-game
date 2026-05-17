@@ -90,13 +90,29 @@ CREATE TABLE IF NOT EXISTS paper_trades (
     UNIQUE (symbol, recommended_date)
 );
 
+-- 역사 시뮬레이션 거래 이력 (영속 아카이브)
+CREATE TABLE IF NOT EXISTS history_trades (
+    id          TEXT PRIMARY KEY,          -- frontend crypto.randomUUID()
+    session_id  TEXT NOT NULL,
+    symbol      TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    type        TEXT NOT NULL,             -- 'buy' | 'sell'
+    quantity    INTEGER NOT NULL,
+    price       REAL NOT NULL,
+    total       REAL NOT NULL,
+    game_ts     INTEGER NOT NULL,          -- 종목 기준 날짜 (Unix ms)
+    note        TEXT,
+    created_at  TEXT DEFAULT (datetime('now', 'localtime'))
+);
+
 -- 인덱스
-CREATE INDEX IF NOT EXISTS idx_prices_date    ON prices       (date);
-CREATE INDEX IF NOT EXISTS idx_fund_date      ON fundamentals (date);
-CREATE INDEX IF NOT EXISTS idx_flows_date     ON flows        (date);
-CREATE INDEX IF NOT EXISTS idx_mktidx_code   ON market_index (code, date);
-CREATE INDEX IF NOT EXISTS idx_paper_date     ON paper_trades (recommended_date);
-CREATE INDEX IF NOT EXISTS idx_paper_status   ON paper_trades (status);
+CREATE INDEX IF NOT EXISTS idx_prices_date        ON prices         (date);
+CREATE INDEX IF NOT EXISTS idx_fund_date          ON fundamentals   (date);
+CREATE INDEX IF NOT EXISTS idx_flows_date         ON flows          (date);
+CREATE INDEX IF NOT EXISTS idx_mktidx_code        ON market_index   (code, date);
+CREATE INDEX IF NOT EXISTS idx_paper_date         ON paper_trades   (recommended_date);
+CREATE INDEX IF NOT EXISTS idx_paper_status       ON paper_trades   (status);
+CREATE INDEX IF NOT EXISTS idx_history_session    ON history_trades (session_id);
 """
 
 
