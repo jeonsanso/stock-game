@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { createChart, createSeriesMarkers, CandlestickSeries, HistogramSeries, LineSeries, type IChartApi, type ISeriesApi, type SeriesType } from 'lightweight-charts'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { createChart, createSeriesMarkers, CandlestickSeries, HistogramSeries, LineSeries, type IChartApi, type ISeriesApi, type ISeriesMarkersPluginApi, type SeriesMarker, type SeriesType, type Time } from 'lightweight-charts'
 import { fetchCandles, type CandleBar } from '../api/yahooFinance'
 
 function calcRSI(candles: CandleBar[], period = 14): { time: number; value: number }[] {
@@ -40,6 +40,8 @@ interface StockChartProps {
   changePct?: number | null
   isFullscreen?: boolean
   onToggleFullscreen?: () => void
+  showSidePanel?: boolean
+  onToggleSidePanel?: () => void
 }
 
 const RANGES: { label: string; value: Range }[] = [
@@ -50,7 +52,7 @@ const RANGES: { label: string; value: Range }[] = [
   { label: '2년', value: '2y' },
 ]
 
-export default function StockChart({ symbol, candles: externalCandles, cutoffDate, trades, startDate, changePct, isFullscreen = false, onToggleFullscreen }: StockChartProps) {
+export default function StockChart({ symbol, candles: externalCandles, cutoffDate, trades, startDate, changePct, isFullscreen = false, onToggleFullscreen, showSidePanel, onToggleSidePanel }: StockChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const rsiContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -59,10 +61,10 @@ export default function StockChart({ symbol, candles: externalCandles, cutoffDat
   const seriesRef = useRef<ISeriesApi<SeriesType> | null>(null)
   const volumeSeriesRef = useRef<ISeriesApi<SeriesType> | null>(null)
   const maSeriesRefs = useRef<ISeriesApi<SeriesType>[]>([])
-  const markersPluginRef = useRef<ReturnType<typeof createSeriesMarkers> | null>(null)
+  const markersPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
   const initialFitDoneRef = useRef(false)
   const isSyncingRef = useRef(false)
-  const [showRsi, setShowRsi] = useState(true)
+  const [showRsi, setShowRsi] = useState(false)
   const [rsiValue, setRsiValue] = useState<number | null>(null)
   const [range, setRange] = useState<Range>('3mo')
   const [loading, setLoading] = useState(true)
@@ -73,29 +75,34 @@ export default function StockChart({ symbol, candles: externalCandles, cutoffDat
   const [volumeRatio, setVolumeRatio] = useState(0.25)
   const isHistoryMode = externalCandles !== undefined
 
+  const calcFullscreenHeight = useCallback((rsiVisible: boolean) => {
+    return window.innerHeight - 48 - (rsiVisible ? 152 : 0)
+  }, [])
+
   useEffect(() => {
-    const onResize = () => {
+    const updateHeight = () => {
       if (isFullscreen) {
-        setChartHeight(window.innerHeight - 48)
+        setChartHeight(calcFullscreenHeight(showRsi))
       } else {
         setChartHeight(Math.max(420, Math.min(720, window.innerHeight - 360)))
       }
     }
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [isFullscreen])
-
-  useEffect(() => {
-    if (isFullscreen) {
-      setChartHeight(window.innerHeight - 48)
-    } else {
-      setChartHeight(Math.max(420, Math.min(720, window.innerHeight - 360)))
-    }
-  }, [isFullscreen])
+    updateHeight()
+    window.addEventListener('resize', updateHeight)
+    return () => window.removeEventListener('resize', updateHeight)
+  }, [isFullscreen, showRsi, calcFullscreenHeight])
 
   useEffect(() => {
     chartRef.current?.applyOptions({ height: chartHeight })
   }, [chartHeight])
+
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      if (rsiContainerRef.current && rsiChartRef.current) {
+        rsiChartRef.current.applyOptions({ width: rsiContainerRef.current.clientWidth })
+      }
+    })
+  }, [showRsi])
 
   useEffect(() => {
     seriesRef.current?.priceScale().applyOptions({ scaleMargins: { top: 0.05, bottom: volumeRatio } })
@@ -277,7 +284,7 @@ export default function StockChart({ symbol, candles: externalCandles, cutoffDat
     }
 
     if (isHistoryMode && formatted.length > 0) {
-      type Marker = Parameters<typeof createSeriesMarkers>[1][number]
+      type Marker = SeriesMarker<Time>
       const markers: Marker[] = []
 
       if (startDate != null) {
@@ -318,7 +325,7 @@ export default function StockChart({ symbol, candles: externalCandles, cutoffDat
       if (markersPluginRef.current) {
         markersPluginRef.current.setMarkers(markers)
       } else {
-        markersPluginRef.current = createSeriesMarkers(seriesRef.current, markers)
+        markersPluginRef.current = createSeriesMarkers(seriesRef.current as never, markers) as ISeriesMarkersPluginApi<Time>
       }
     }
 
@@ -420,6 +427,20 @@ export default function StockChart({ symbol, candles: externalCandles, cutoffDat
               ))}
             </div>
           )}
+          {isFullscreen && onToggleSidePanel && (
+            <button
+              onClick={onToggleSidePanel}
+              title={showSidePanel ? '패널 숨기기' : '패널 보이기'}
+              className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                {showSidePanel
+                  ? <path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm-7 0v18" />
+                  : <path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2z" />
+                }
+              </svg>
+            </button>
+          )}
           <button
             onClick={onToggleFullscreen}
             title={isFullscreen ? '축소 (ESC)' : '전체화면'}
@@ -451,28 +472,25 @@ export default function StockChart({ symbol, candles: externalCandles, cutoffDat
         )}
       </div>
 
-      {showRsi && (
-        <div className="border-t border-gray-800">
-          <div className="flex items-center gap-3 px-4 py-1.5 text-xs text-gray-500">
-            <span className="text-indigo-400 font-medium">RSI(14)</span>
-            {rsiValue != null && (
-              <span className={`font-bold ${rsiValue >= 70 ? 'text-red-400' : rsiValue <= 30 ? 'text-blue-400' : 'text-indigo-300'}`}>
-                {rsiValue}
-                {rsiValue >= 70 ? ' 과매수' : rsiValue <= 30 ? ' 과매도' : ''}
-              </span>
-            )}
-            <span className="ml-auto text-gray-600">70 과매수 · 30 과매도</span>
-          </div>
-          <div className="relative">
-            <div ref={rsiContainerRef} />
-            {/* 70/30 기준선 오버레이 */}
-            <div className="absolute inset-0 pointer-events-none">
-              <div className="absolute w-full border-t border-red-500/20" style={{ top: '10%' }} />
-              <div className="absolute w-full border-t border-blue-500/20" style={{ top: '90%' }} />
-            </div>
+      <div className={showRsi ? 'border-t border-gray-800' : 'overflow-hidden h-0'}>
+        <div className="flex items-center gap-3 px-4 py-1.5 text-xs text-gray-500">
+          <span className="text-indigo-400 font-medium">RSI(14)</span>
+          {rsiValue != null && (
+            <span className={`font-bold ${rsiValue >= 70 ? 'text-red-400' : rsiValue <= 30 ? 'text-blue-400' : 'text-indigo-300'}`}>
+              {rsiValue}
+              {rsiValue >= 70 ? ' 과매수' : rsiValue <= 30 ? ' 과매도' : ''}
+            </span>
+          )}
+          <span className="ml-auto text-gray-600">70 과매수 · 30 과매도</span>
+        </div>
+        <div className="relative">
+          <div ref={rsiContainerRef} />
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute w-full border-t border-red-500/20" style={{ top: '10%' }} />
+            <div className="absolute w-full border-t border-blue-500/20" style={{ top: '90%' }} />
           </div>
         </div>
-      )}
+      </div>
     </div>
   )
 }

@@ -191,6 +191,40 @@ export async function fetchCandlesCached(
   return candles
 }
 
+export interface FinanceSummary {
+  profit: number  // 영업이익 (억원), 음수면 적자
+  year: string    // e.g. "2024"
+}
+
+const _financeCache = new Map<string, FinanceSummary | null>()
+
+export async function fetchFinanceSummary(symbol: string): Promise<FinanceSummary | null> {
+  const code = toCode(symbol)
+  if (_financeCache.has(code)) return _financeCache.get(code)!
+  try {
+    const res = await fetch(`/api/naver-stock/api/stock/${code}/finance/summary`)
+    if (!res.ok) { _financeCache.set(code, null); return null }
+    const d = await res.json()
+    const annual = d?.chartIncomeStatement?.annual
+    if (!annual) { _financeCache.set(code, null); return null }
+    const titleList: { isConsensus: string; title: string }[] = annual.trTitleList ?? []
+    const columns: string[][] = annual.columns ?? []
+    const actuals = titleList.map((t, i) => ({ ...t, i })).filter((t) => t.isConsensus === 'N')
+    if (actuals.length === 0) { _financeCache.set(code, null); return null }
+    const last = actuals[actuals.length - 1]
+    const profitRow = columns.find((r) => r[0] === '영업이익')
+    if (!profitRow) { _financeCache.set(code, null); return null }
+    const profit = Number(profitRow[last.i + 1]) || 0
+    const year = last.title.slice(0, 4)
+    const result: FinanceSummary = { profit, year }
+    _financeCache.set(code, result)
+    return result
+  } catch {
+    _financeCache.set(code, null)
+    return null
+  }
+}
+
 export async function searchSymbols(query: string): Promise<SearchResult[]> {
   const res = await fetch(`/api/naver-search/ac?q=${encodeURIComponent(query)}&target=stock,index&lang=ko`)
   if (!res.ok) throw new Error(`search ${res.status}`)

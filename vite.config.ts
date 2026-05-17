@@ -7,6 +7,9 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    watch: {
+      ignored: ['**/backend/**', '**/.claude/**', '**/dist/**'],
+    },
     proxy: {
       '/api/naver-stock': {
         target: 'https://m.stock.naver.com',

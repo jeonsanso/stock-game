@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { fetchCandlesCached, getCandleAt, type CandleBar } from '../api/yahooFinance'
+import { fetchCandlesCached, fetchFinanceSummary, type FinanceSummary } from '../api/yahooFinance'
 import { WATCHLIST } from '../api/constants'
-import { SYNTHETIC_STOCKS, ALTERNATE_STOCKS, getSyntheticCandles } from '../api/syntheticStocks'
+import { SYNTHETIC_STOCKS, ALTERNATE_STOCKS } from '../api/syntheticStocks'
 import { useHistoryStore } from '../store/historyStore'
-import { formatKRW, formatChange, formatChangePercent, changeColor, changeBg } from '../utils/format'
+import { formatKRW, formatChange, formatChangePercent, changeColor, changeBg, formatProfit } from '../utils/format'
 import StockSearch from '../components/StockSearch'
 import SaveLoadPanel from '../components/SaveLoadPanel'
 
@@ -17,6 +17,7 @@ interface StockCardData {
   change: number
   changePct: number
   loading: boolean
+  finInfo?: FinanceSummary | null
 }
 
 export default function HistoryHomePage() {
@@ -27,82 +28,85 @@ export default function HistoryHomePage() {
   const [syntheticCards, setSyntheticCards] = useState<StockCardData[]>([])
   const [customCards, setCustomCards] = useState<StockCardData[]>([])
 
-  // 완료되지 않은 합성 종목 앞 10개
   const activeStocks = ALL_SYNTHETIC.filter((s) => !completedStocks.includes(s.symbol)).slice(0, 10)
 
+  // WATCHLIST 가격 + 재무정보 fetch
   useEffect(() => {
     WATCHLIST.forEach((stock, idx) => {
       const gameDate = stockPositions[stock.symbol] ?? startDate
-      fetchCandlesCached(stock.symbol, '1y')
-        .then((candles: CandleBar[]) => {
+      Promise.all([
+        fetchCandlesCached(stock.symbol, '1y'),
+        fetchFinanceSummary(stock.symbol),
+      ])
+        .then(([candles, finInfo]) => {
           const cutoffSec = Math.floor(gameDate / 1000)
           const currentIdx = candles.findLastIndex((c) => c.time <= cutoffSec)
           const current = candles[currentIdx]
           const prev = candles[currentIdx - 1]
-
           if (!current) {
-            setCards((prev_) =>
-              prev_.map((c, i) => i === idx ? { ...c, loading: false } : c),
-            )
+            setCards((p) => p.map((c, i) => i === idx ? { ...c, loading: false, finInfo } : c))
             return
           }
-
           const change = prev ? current.close - prev.close : 0
           const changePct = prev && prev.close > 0 ? (change / prev.close) * 100 : 0
-
-          setCards((prev_) =>
-            prev_.map((c, i) =>
-              i === idx
-                ? { ...c, price: current.close, change, changePct, loading: false }
-                : c,
-            ),
-          )
+          setCards((p) => p.map((c, i) =>
+            i === idx ? { ...c, price: current.close, change, changePct, loading: false, finInfo } : c,
+          ))
         })
-        .catch(() => {
-          setCards((prev_) =>
-            prev_.map((c, i) => (i === idx ? { ...c, loading: false } : c)),
-          )
-        })
+        .catch(() => setCards((p) => p.map((c, i) => i === idx ? { ...c, loading: false } : c)))
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(stockPositions), startDate])
 
+  // 랜덤 종목(실제 코스닥) 가격 + 재무정보 async fetch
   useEffect(() => {
-    setSyntheticCards(activeStocks.map((stock) => {
+    if (activeStocks.length === 0) { setSyntheticCards([]); return }
+    setSyntheticCards(activeStocks.map((stock) => ({
+      symbol: stock.symbol, name: stock.name, price: 0, change: 0, changePct: 0, loading: true,
+    })))
+    activeStocks.forEach((stock, idx) => {
       const gameDate = stockPositions[stock.symbol] ?? startDate
-      const cutoffSec = Math.floor(gameDate / 1000)
-      const candles = getSyntheticCandles(stock.symbol)
-      const currentIdx = candles.findLastIndex((c) => c.time <= cutoffSec)
-      const current = candles[currentIdx]
-      const prev = candles[currentIdx - 1]
-      if (!current) return { symbol: stock.symbol, name: stock.name, price: 0, change: 0, changePct: 0, loading: false }
-      const change = prev ? current.close - prev.close : 0
-      const changePct = prev && prev.close > 0 ? (change / prev.close) * 100 : 0
-      return { symbol: stock.symbol, name: stock.name, price: current.close, change, changePct, loading: false }
-    }))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(activeStocks.map(s => s.symbol)), JSON.stringify(stockPositions)])
-
-  // 검색 등록 종목 가격 로드
-  const customEntries = Object.entries(customSymbols)
-  useEffect(() => {
-    if (customEntries.length === 0) { setCustomCards([]); return }
-    const loading = customEntries.map(([sym, nm]) => ({ symbol: sym, name: nm, price: 0, change: 0, changePct: 0, loading: true }))
-    setCustomCards(loading)
-    customEntries.forEach(([sym, nm], idx) => {
-      const gameDate = stockPositions[sym] ?? startDate
-      fetchCandlesCached(sym, '1y')
-        .then((candles: CandleBar[]) => {
+      Promise.all([
+        fetchCandlesCached(stock.symbol, '1y'),
+        fetchFinanceSummary(stock.symbol),
+      ])
+        .then(([candles, finInfo]) => {
           const cutoffSec = Math.floor(gameDate / 1000)
           const currentIdx = candles.findLastIndex((c) => c.time <= cutoffSec)
           const current = candles[currentIdx]
           const prev = candles[currentIdx - 1]
-          if (!current) { setCustomCards(p => p.map((c, i) => i === idx ? { ...c, loading: false } : c)); return }
+          if (!current) { setSyntheticCards((p) => p.map((c, i) => i === idx ? { ...c, loading: false, finInfo } : c)); return }
           const change = prev ? current.close - prev.close : 0
           const changePct = prev && prev.close > 0 ? (change / prev.close) * 100 : 0
-          setCustomCards(p => p.map((c, i) => i === idx ? { ...c, price: current.close, change, changePct, loading: false } : c))
+          setSyntheticCards((p) => p.map((c, i) => i === idx ? { ...c, price: current.close, change, changePct, loading: false, finInfo } : c))
         })
-        .catch(() => setCustomCards(p => p.map((c, i) => i === idx ? { ...c, loading: false } : c)))
+        .catch(() => setSyntheticCards((p) => p.map((c, i) => i === idx ? { ...c, loading: false } : c)))
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(activeStocks.map((s) => s.symbol)), JSON.stringify(stockPositions), startDate])
+
+  // 검색 등록 종목 가격 + 재무정보 fetch
+  const customEntries = Object.entries(customSymbols)
+  useEffect(() => {
+    if (customEntries.length === 0) { setCustomCards([]); return }
+    setCustomCards(customEntries.map(([sym, nm]) => ({ symbol: sym, name: nm, price: 0, change: 0, changePct: 0, loading: true })))
+    customEntries.forEach(([sym], idx) => {
+      const gameDate = stockPositions[sym] ?? startDate
+      Promise.all([
+        fetchCandlesCached(sym, '1y'),
+        fetchFinanceSummary(sym),
+      ])
+        .then(([candles, finInfo]) => {
+          const cutoffSec = Math.floor(gameDate / 1000)
+          const currentIdx = candles.findLastIndex((c) => c.time <= cutoffSec)
+          const current = candles[currentIdx]
+          const prev = candles[currentIdx - 1]
+          if (!current) { setCustomCards((p) => p.map((c, i) => i === idx ? { ...c, loading: false, finInfo } : c)); return }
+          const change = prev ? current.close - prev.close : 0
+          const changePct = prev && prev.close > 0 ? (change / prev.close) * 100 : 0
+          setCustomCards((p) => p.map((c, i) => i === idx ? { ...c, price: current.close, change, changePct, loading: false, finInfo } : c))
+        })
+        .catch(() => setCustomCards((p) => p.map((c, i) => i === idx ? { ...c, loading: false } : c)))
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(customSymbols), JSON.stringify(stockPositions)])
@@ -127,8 +131,10 @@ export default function HistoryHomePage() {
         <div className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 flex items-center justify-between">
           <p className="text-gray-400 text-sm">
             완료된 종목 <span className="text-white font-semibold">{completedStocks.length}개</span>
-            {ALL_SYNTHETIC.length - completedStocks.length > 0 && (
-              <span className="text-gray-500 ml-2">· 남은 종목 {Math.max(0, ALL_SYNTHETIC.filter(s => !completedStocks.includes(s.symbol)).length)}개</span>
+            {activeStocks.length > 0 && (
+              <span className="text-gray-500 ml-2">
+                · 남은 종목 {activeStocks.length}개
+              </span>
             )}
           </p>
           <Link to="/history/portfolio" className="text-indigo-400 text-xs hover:text-indigo-300 transition-colors">
@@ -229,6 +235,16 @@ function HistoryStockCard({ data, onRemove }: { data: StockCardData; onRemove?: 
             </>
           )}
         </div>
+        {!data.loading && data.finInfo != null && (
+          <div className="mt-2 pt-2 border-t border-gray-700 flex items-center justify-between">
+            <span className={`text-xs font-semibold ${data.finInfo.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              {data.finInfo.profit >= 0 ? '흑자' : '적자'}
+            </span>
+            <span className="text-xs text-gray-400">
+              영업이익 {formatProfit(data.finInfo.profit)} ({data.finInfo.year})
+            </span>
+          </div>
+        )}
       </Link>
       {onRemove && (
         <button

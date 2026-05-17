@@ -10,6 +10,9 @@ import HistoryHomePage from './pages/HistoryHomePage'
 import HistoryStockPage from './pages/HistoryStockPage'
 import HistoryPortfolioPage from './pages/HistoryPortfolioPage'
 import HistoryResultsPage from './pages/HistoryResultsPage'
+import AIRecommendPage from './pages/AIRecommendPage'
+import PaperTradingPage from './pages/PaperTradingPage'
+import HelpPage from './pages/HelpPage'
 import { useGameStore } from './store/gameStore'
 import { useHistoryStore } from './store/historyStore'
 import { fetchQuotes, fetchCandlesCached, getPriceAt } from './api/yahooFinance'
@@ -112,6 +115,9 @@ export default function App() {
         <Route path="/" element={<ModeSelectPage />} />
         <Route path="/realtime/*" element={<RealtimeLayout />} />
         <Route path="/history/*" element={<HistoryLayout />} />
+        <Route path="/ai-recommend" element={<AIRecommendPage />} />
+        <Route path="/paper-trading" element={<PaperTradingPage />} />
+        <Route path="/help" element={<HelpPage />} />
       </Routes>
     </BrowserRouter>
   )

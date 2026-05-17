@@ -2,13 +2,14 @@ import { useEffect, useState, useCallback } from 'react'
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom'
 import { fetchCandlesCached, getCandleAt, type CandleBar } from '../api/yahooFinance'
 import { WATCHLIST } from '../api/constants'
-import { getSyntheticName, getSyntheticCandles, isSynthetic } from '../api/syntheticStocks'
+import { getSyntheticName, getSyntheticCandles, isSynthetic, SYNTHETIC_STOCKS, ALTERNATE_STOCKS } from '../api/syntheticStocks'
 import { useHistoryStore } from '../store/historyStore'
 import StockChart from '../components/StockChart'
 import HistoryTradePanel from '../components/HistoryTradePanel'
 import { formatKRW, formatNumber, formatChangePercent, formatChange, changeColor, changeBg } from '../utils/format'
 
 const watchlistNameMap = Object.fromEntries(WATCHLIST.map((w) => [w.symbol, w.name]))
+const randomStockNameMap = Object.fromEntries([...SYNTHETIC_STOCKS, ...ALTERNATE_STOCKS].map((s) => [s.symbol, s.name]))
 
 export default function HistoryStockPage() {
   const { symbol } = useParams<{ symbol: string }>()
@@ -72,7 +73,7 @@ export default function HistoryStockPage() {
 
   const name = isSynthetic(decoded)
     ? getSyntheticName(decoded)
-    : (watchlistNameMap[decoded] ?? customSymbols[decoded] ?? locationName ?? decoded)
+    : (watchlistNameMap[decoded] ?? randomStockNameMap[decoded] ?? customSymbols[decoded] ?? locationName ?? decoded)
 
   // 검색으로 진입한 비-기본 종목 자동 등록
   useEffect(() => {
@@ -83,8 +84,10 @@ export default function HistoryStockPage() {
   }, [allCandles.length])
   const [infoOpen, setInfoOpen] = useState(true)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [showPanel, setShowPanel] = useState(true)
 
   const handleToggleFullscreen = useCallback(() => setIsFullscreen((v) => !v), [])
+  const handleTogglePanel = useCallback(() => setShowPanel((v) => !v), [])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsFullscreen(false) }
@@ -215,27 +218,31 @@ export default function HistoryStockPage() {
                 .map((t) => ({ type: t.type, timestamp: t.timestamp }))}
               isFullscreen={true}
               onToggleFullscreen={handleToggleFullscreen}
+              showSidePanel={showPanel}
+              onToggleSidePanel={handleTogglePanel}
             />
           </div>
-          <div className="w-72 shrink-0 overflow-y-auto border-l border-gray-800 p-3">
-            {!loading ? (
-              <div className="space-y-3">
-                <HistoryTradePanel
-                  symbol={decoded}
-                  name={name}
-                  price={price}
-                  gameDate={gameDate}
-                  nextTradingDateMs={nextTradingDateMs}
-                  hasReachedEnd={hasReachedEnd}
-                  onComplete={handleComplete}
-                  startPrice={startPrice}
-                  nextDayChangePct={nextDayChangePct}
-                />
-              </div>
-            ) : (
-              <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 animate-pulse h-64" />
-            )}
-          </div>
+          {showPanel && (
+            <div className="w-80 shrink-0 overflow-y-auto border-l border-gray-800 p-3">
+              {!loading ? (
+                <div className="space-y-3">
+                  <HistoryTradePanel
+                    symbol={decoded}
+                    name={name}
+                    price={price}
+                    gameDate={gameDate}
+                    nextTradingDateMs={nextTradingDateMs}
+                    hasReachedEnd={hasReachedEnd}
+                    onComplete={handleComplete}
+                    startPrice={startPrice}
+                    nextDayChangePct={nextDayChangePct}
+                  />
+                </div>
+              ) : (
+                <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 animate-pulse h-64" />
+              )}
+            </div>
+          )}
         </div>
       )}
 

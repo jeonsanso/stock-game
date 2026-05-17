@@ -4,7 +4,10 @@ import { formatKRW } from '../utils/format'
 import { INITIAL_CASH } from '../api/constants'
 
 export default function SaveLoadPanel() {
-  const { saves, saveSnapshot, loadSnapshot, deleteSnapshot, cash, holdings, gameDate } = useHistoryStore()
+  const { saves, saveSnapshot, loadSnapshot, deleteSnapshot, cash, holdings, stockPositions, startDate } = useHistoryStore()
+  const gameDate = Object.values(stockPositions).length > 0
+    ? Math.max(...Object.values(stockPositions))
+    : startDate
   const [open, setOpen] = useState(false)
   const [saveName, setSaveName] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)

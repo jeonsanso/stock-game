@@ -31,3 +31,10 @@ export function changeBg(value: number): string {
   if (value < 0) return 'bg-blue-500/10 text-blue-400'
   return 'bg-gray-500/10 text-gray-400'
 }
+
+export function formatProfit(억: number): string {
+  const abs = Math.abs(억)
+  if (abs >= 10000) return `${(abs / 10000).toFixed(1)}조원`
+  if (abs >= 100) return `${abs.toLocaleString()}억원`
+  return `${abs}억원`
+}

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchCandlesCached, getPriceAt, type CandleBar } from '../api/yahooFinance'
-import { getSyntheticCandles, isSynthetic } from '../api/syntheticStocks'
+import { isSynthetic } from '../api/syntheticStocks'
 import { useHistoryStore, type TradeRecord, type Holding } from '../store/historyStore'
 import { formatKRW, formatNumber, formatChangePercent, formatChange, changeColor, changeBg } from '../utils/format'
 import { INITIAL_CASH } from '../api/constants'
@@ -9,38 +9,52 @@ import { INITIAL_CASH } from '../api/constants'
 export default function HistoryPortfolioPage() {
   const { cash, holdings, tradeHistory, stockPositions, startDate } = useHistoryStore()
   const [priceMap, setPriceMap] = useState<Record<string, number>>({})
+  const [startPriceMap, setStartPriceMap] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(false)
 
-  const holdingSymbols = Object.keys(holdings)
-  const symbolsKey = holdingSymbols.join(',')
+  // 보유 + 거래한 모든 종목 대상으로 fetch
+  const tradedSymbols = [...new Set(tradeHistory.map((t) => t.symbol))]
+  const symbolsKey = tradedSymbols.join(',')
 
   useEffect(() => {
-    if (holdingSymbols.length === 0) {
+    if (tradedSymbols.length === 0) {
       setPriceMap({})
+      setStartPriceMap({})
       return
     }
     let cancelled = false
     setLoading(true)
     Promise.all(
-      holdingSymbols.map(async (sym) => {
-        const date = stockPositions[sym] ?? startDate
+      tradedSymbols.map(async (sym) => {
+        const gameDate = stockPositions[sym] ?? startDate
+        let candles: CandleBar[]
         if (isSynthetic(sym)) {
-          const candles = getSyntheticCandles(sym)
-          return [sym, getPriceAt(candles, date) ?? 0] as const
+          candles = []
+        } else {
+          candles = await fetchCandlesCached(sym, '1y')
         }
-        const candles: CandleBar[] = await fetchCandlesCached(sym, '1y')
-        return [sym, getPriceAt(candles, date) ?? 0] as const
+        const startPx = getPriceAt(candles, startDate) ?? 0
+        const endPx = getPriceAt(candles, gameDate) ?? 0
+        return { sym, startPx, endPx }
       }),
     )
       .then((entries) => {
-        if (!cancelled) setPriceMap(Object.fromEntries(entries))
+        if (cancelled) return
+        const pMap: Record<string, number> = {}
+        const sMap: Record<string, number> = {}
+        entries.forEach(({ sym, startPx, endPx }) => {
+          pMap[sym] = endPx
+          sMap[sym] = startPx
+        })
+        setPriceMap(pMap)
+        setStartPriceMap(sMap)
       })
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false) })
 
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symbolsKey, JSON.stringify(stockPositions)])
+  }, [symbolsKey, JSON.stringify(stockPositions), startDate])
 
   const stockValue = Object.values(holdings).reduce((sum, h) => {
     const price = priceMap[h.symbol] ?? h.avgPrice
@@ -82,10 +96,18 @@ export default function HistoryPortfolioPage() {
 
       <StockPnlSection tradeHistory={tradeHistory} holdings={holdings} priceMap={priceMap} loading={loading} />
 
+      <MarketConditionSection
+        tradeHistory={tradeHistory}
+        holdings={holdings}
+        priceMap={priceMap}
+        startPriceMap={startPriceMap}
+        loading={loading}
+      />
+
       <div className="space-y-6">
         <section>
           <h2 className="text-white font-semibold mb-3">보유 종목</h2>
-          {holdingSymbols.length === 0 ? (
+          {Object.keys(holdings).length === 0 ? (
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center text-gray-400 text-sm">
               보유 중인 종목이 없습니다.
             </div>
@@ -277,7 +299,7 @@ function StockPnlSection({
     <section>
       <h2 className="text-white font-semibold mb-3">종목별 수익</h2>
       <div className="space-y-2">
-        {rows.map(({ sym, name, totalSpent, holdingValue, netPnl, pnlPct, isHolding }) => {
+        {rows.map(({ sym, name, holdingValue, netPnl, pnlPct, isHolding }) => {
           const pos = netPnl >= 0
           return (
             <Link
@@ -321,6 +343,152 @@ function StockPnlSection({
           )
         })}
       </div>
+    </section>
+  )
+}
+
+function MarketConditionSection({
+  tradeHistory,
+  holdings,
+  priceMap,
+  startPriceMap,
+  loading,
+}: {
+  tradeHistory: TradeRecord[]
+  holdings: Record<string, Holding>
+  priceMap: Record<string, number>
+  startPriceMap: Record<string, number>
+  loading: boolean
+}) {
+  const symbols = [...new Set(tradeHistory.map((t) => t.symbol))]
+  if (symbols.length === 0 || loading) return null
+
+  const rows = symbols
+    .filter((sym) => (startPriceMap[sym] ?? 0) > 0)
+    .map((sym) => {
+      const trades = tradeHistory.filter((t) => t.symbol === sym)
+      const name = trades[0].name
+      const totalSpent = trades.filter((t) => t.type === 'buy').reduce((s, t) => s + t.total, 0)
+      const totalReceived = trades.filter((t) => t.type === 'sell').reduce((s, t) => s + t.total, 0)
+      const holding = holdings[sym]
+      const holdingValue = holding ? (priceMap[sym] ?? 0) * holding.quantity : 0
+      const netPnl = totalReceived + holdingValue - totalSpent
+      const userPct = totalSpent > 0 ? (netPnl / totalSpent) * 100 : 0
+
+      const startPx = startPriceMap[sym]
+      const endPx = priceMap[sym] ?? 0
+      const marketPct = ((endPx - startPx) / startPx) * 100
+
+      const marketUp = marketPct >= 0
+      const userProfit = netPnl >= 0
+      const alpha = userPct - marketPct
+
+      let category: string
+      let categoryColor: string
+      if (marketUp && userProfit) {
+        category = '상승장 수익'
+        categoryColor = 'text-red-400'
+      } else if (marketUp && !userProfit) {
+        category = '기회 손실'
+        categoryColor = 'text-orange-400'
+      } else if (!marketUp && userProfit) {
+        category = '역추세 수익'
+        categoryColor = 'text-yellow-400'
+      } else {
+        category = '하락장 손실'
+        categoryColor = 'text-blue-400'
+      }
+
+      return { sym, name, marketPct, userPct, netPnl, category, categoryColor, alpha, marketUp, userProfit }
+    })
+
+  if (rows.length === 0) return null
+
+  const avgMarketPct = rows.reduce((s, r) => s + r.marketPct, 0) / rows.length
+  const avgUserPct = rows.reduce((s, r) => s + r.userPct, 0) / rows.length
+  const avgAlpha = avgUserPct - avgMarketPct
+
+  return (
+    <section className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+      <h2 className="text-white font-semibold mb-1">시장 환경 분석</h2>
+      <p className="text-gray-500 text-xs mb-4">시뮬레이션 기간 동안 해당 종목의 실제 등락과 내 수익을 비교합니다</p>
+
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <div className="bg-gray-800 rounded-xl px-3 py-2.5">
+          <p className="text-gray-400 text-xs mb-1">시장 평균 수익률</p>
+          <p className={`text-lg font-bold ${avgMarketPct >= 0 ? 'text-red-400' : 'text-blue-400'}`}>
+            {avgMarketPct >= 0 ? '+' : ''}{avgMarketPct.toFixed(2)}%
+          </p>
+          <p className="text-gray-500 text-xs">거래 종목 바이앤홀드</p>
+        </div>
+        <div className="bg-gray-800 rounded-xl px-3 py-2.5">
+          <p className="text-gray-400 text-xs mb-1">내 평균 수익률</p>
+          <p className={`text-lg font-bold ${avgUserPct >= 0 ? 'text-red-400' : 'text-blue-400'}`}>
+            {avgUserPct >= 0 ? '+' : ''}{avgUserPct.toFixed(2)}%
+          </p>
+          <p className="text-gray-500 text-xs">종목당 평균</p>
+        </div>
+        <div className="bg-gray-800 rounded-xl px-3 py-2.5">
+          <p className="text-gray-400 text-xs mb-1">시장 대비 알파</p>
+          <p className={`text-lg font-bold ${avgAlpha >= 0 ? 'text-green-400' : 'text-orange-400'}`}>
+            {avgAlpha >= 0 ? '+' : ''}{avgAlpha.toFixed(2)}%p
+          </p>
+          <p className="text-gray-500 text-xs">{avgAlpha >= 0 ? '시장 상회' : '시장 하회'}</p>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {rows.map(({ sym, name, marketPct, userPct, category, categoryColor, alpha, marketUp }) => (
+          <div key={sym} className="flex items-center justify-between bg-gray-800 rounded-xl px-3 py-2.5">
+            <div className="flex items-center gap-2.5">
+              <span className="text-base">{marketUp ? '📈' : '📉'}</span>
+              <div>
+                <p className="text-white text-sm font-semibold">{name}</p>
+                <p className={`text-xs ${categoryColor}`}>{category}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-5 text-right">
+              <div>
+                <p className="text-gray-500 text-xs">시장</p>
+                <p className={`text-sm font-semibold ${marketPct >= 0 ? 'text-red-400' : 'text-blue-400'}`}>
+                  {marketPct >= 0 ? '+' : ''}{marketPct.toFixed(2)}%
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-500 text-xs">내 수익</p>
+                <p className={`text-sm font-semibold ${userPct >= 0 ? 'text-red-400' : 'text-blue-400'}`}>
+                  {userPct >= 0 ? '+' : ''}{userPct.toFixed(2)}%
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-500 text-xs">알파</p>
+                <p className={`text-sm font-semibold ${alpha >= 0 ? 'text-green-400' : 'text-orange-400'}`}>
+                  {alpha >= 0 ? '+' : ''}{alpha.toFixed(2)}%p
+                </p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {(rows.some((r) => !r.marketUp && r.userProfit) ||
+        rows.some((r) => r.marketUp && !r.userProfit) ||
+        Math.abs(avgAlpha) > 5) && (
+        <div className="flex flex-wrap gap-3 text-xs border-t border-gray-800 pt-3 mt-3">
+          {rows.some((r) => !r.marketUp && r.userProfit) && (
+            <span className="text-yellow-400">★ 하락장에서 수익 — 탁월한 역추세 트레이딩</span>
+          )}
+          {rows.some((r) => r.marketUp && !r.userProfit) && (
+            <span className="text-orange-400">⚠ 상승 종목에서 손실 — 진입·청산 타이밍 점검 필요</span>
+          )}
+          {avgAlpha > 5 && (
+            <span className="text-green-400">▲ 시장 대비 {avgAlpha.toFixed(1)}%p 초과 수익 달성</span>
+          )}
+          {avgAlpha < -5 && (
+            <span className="text-orange-400">▼ 시장보다 {Math.abs(avgAlpha).toFixed(1)}%p 낮은 성과 — 패시브 전략을 고려해보세요</span>
+          )}
+        </div>
+      )}
     </section>
   )
 }
