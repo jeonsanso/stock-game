@@ -37,3 +37,14 @@ export async function loadTrades(): Promise<TradeRecord[]> {
   if (!res.ok) throw new Error(`history/trades ${res.status}`)
   return res.json()
 }
+
+export async function analyzeHistory(symbol: string, name: string, trades: TradeRecord[]): Promise<string> {
+  const res = await fetch(`${API_BASE}/api/history/analyze`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ symbol, name, trades }),
+  })
+  if (!res.ok) throw new Error(`analyze ${res.status}`)
+  const data = await res.json()
+  return data.text as string
+}

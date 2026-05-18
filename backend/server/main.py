@@ -470,6 +470,102 @@ async def history_trades(session_id: str = Query(..., description="브라우저 
     return _get_trades(session_id)
 
 
+# ── 세력 분석 (Gemini) ────────────────────────────────────────
+
+GEMINI_API_KEY = "AIzaSyB96OfvIWUV9JWYRA96ZjtHFw9Qk5z3EGo"
+GEMINI_MODEL   = "gemini-3.1-flash-lite-preview"
+GEMINI_URL     = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+
+
+class _AnalyzeBody(BaseModel):
+    symbol: str
+    name: str
+    trades: List[Dict[str, Any]]  # {type, price, quantity, timestamp, note}
+
+
+def _build_prompt(name: str, plays: List[Dict]) -> str:
+    lines = []
+    for i, p in enumerate(plays, 1):
+        pnl = p["pnl_pct"]
+        sign = "+" if pnl >= 0 else ""
+        lines.append(
+            f"플레이{i}: {p['buy_date']} {p['buy_price']:,}원 매수 → "
+            f"{p['sell_date']} {p['sell_price']:,}원 매도 "
+            f"({sign}{pnl:.1f}%, {p['holding_days']}일 보유)"
+            + (f" / 매도 다음날: {p['next_day_chg']:+.1f}%" if p.get("next_day_chg") is not None else "")
+            + (f" / 메모: {p['note']}" if p.get("note") else "")
+        )
+
+    plays_text = "\n".join(lines)
+    total_pnl  = sum(p["pnl_pct"] for p in plays)
+    wins       = sum(1 for p in plays if p["pnl_pct"] > 0)
+
+    return f"""너는 주식 작전 세력 텔레그램방 멤버야.
+팀장, 부팀장, 감시자 3명이 개미 투자자의 매매를 실시간으로 보면서 대화하는 형식으로 써줘.
+말투는 짧고 비밀스럽게. 각 플레이마다 반응해줘.
+개미가 잘 한 플레이엔 세력이 당황하거나 감탄하고,
+못 한 플레이엔 세력이 기뻐하거나 비웃어.
+
+종목: {name}
+전체 {len(plays)}번 거래, {wins}승 {len(plays)-wins}패, 합산 수익률 {total_pnl:+.1f}%
+
+거래 기록:
+{plays_text}
+
+각 플레이를 날짜 순서대로 대화로 써줘.
+형식: [날짜]\n팀장: ...\n감시자: ...\n부팀장: ...
+너무 길지 않게, 각 플레이당 3~4줄로."""
+
+
+@app.post("/api/history/analyze", summary="세력 텔레그램방 AI 생성")
+async def analyze_history(body: _AnalyzeBody) -> Dict[str, Any]:
+    import urllib.request, json as _json
+    from datetime import datetime, timezone
+
+    trades = sorted(body.trades, key=lambda t: t["timestamp"])
+    buys, plays = [], []
+
+    for t in trades:
+        if t["type"] == "buy":
+            buys.append(t)
+        elif buys:
+            b = buys.pop(0)
+            buy_dt  = datetime.fromtimestamp(b["timestamp"] / 1000, tz=timezone.utc)
+            sell_dt = datetime.fromtimestamp(t["timestamp"]  / 1000, tz=timezone.utc)
+            holding = (t["timestamp"] - b["timestamp"]) // (1000 * 60 * 60 * 24)
+            pnl_pct = (t["price"] - b["price"]) / b["price"] * 100
+            plays.append({
+                "buy_date":  buy_dt.strftime("%m/%d"),
+                "sell_date": sell_dt.strftime("%m/%d"),
+                "buy_price":  b["price"],
+                "sell_price": t["price"],
+                "holding_days": holding,
+                "pnl_pct": pnl_pct,
+                "note": t.get("note") or b.get("note"),
+            })
+
+    if not plays:
+        return {"text": "거래 기록이 없습니다."}
+
+    prompt = _build_prompt(body.name, plays)
+    payload = _json.dumps({
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.95, "maxOutputTokens": 1200},
+    }).encode()
+
+    req = urllib.request.Request(
+        GEMINI_URL, data=payload,
+        headers={"Content-Type": "application/json"}, method="POST"
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as res:
+            data = _json.loads(res.read())
+            text = data["candidates"][0]["content"]["parts"][0]["text"]
+            return {"text": text}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Gemini 오류: {exc}")
+
+
 # ── 모의투자 ──────────────────────────────────────────────────
 
 @app.post("/api/paper/record", summary="오늘 추천을 모의투자 테이블에 기록")

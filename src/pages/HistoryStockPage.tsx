@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom'
 import { fetchCandlesCached, getCandleAt, type CandleBar } from '../api/yahooFinance'
 import { WATCHLIST } from '../api/constants'
@@ -6,6 +6,7 @@ import { getSyntheticName, getSyntheticCandles, isSynthetic, SYNTHETIC_STOCKS, A
 import { useHistoryStore } from '../store/historyStore'
 import StockChart from '../components/StockChart'
 import HistoryTradePanel from '../components/HistoryTradePanel'
+import SeoryeokChat, { type ChatMessage, makeBuyMessages, makeHoldMessages, makeSellMessages, makeCompleteMessages } from '../components/SeoryeokChat'
 import { formatKRW, formatNumber, formatChangePercent, formatChange, changeColor, changeBg } from '../utils/format'
 
 const watchlistNameMap = Object.fromEntries(WATCHLIST.map((w) => [w.symbol, w.name]))
@@ -24,6 +25,11 @@ export default function HistoryStockPage() {
   const [allCandles, setAllCandles] = useState<CandleBar[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+  const prevTradeCount = useRef(0)
+  const prevGameDate = useRef<number | null>(null)
+  const prevNextDayChangePct = useRef<number | null>(null)
 
   useEffect(() => {
     if (!decoded) return
@@ -101,15 +107,56 @@ export default function HistoryStockPage() {
     day: '2-digit',
   })
 
+  // 거래 이력 변화 감지 → 매수/매도 메시지
+  useEffect(() => {
+    const symbolTrades = tradeHistory.filter((t) => t.symbol === decoded)
+    if (symbolTrades.length === 0) { prevTradeCount.current = 0; return }
+    if (symbolTrades.length <= prevTradeCount.current) return
+    const latest = symbolTrades[0]
+    if (latest.type === 'buy') {
+      setChatMessages((m) => [...m, ...makeBuyMessages(latest.price, latest.quantity)])
+    } else {
+      const buyTrades = symbolTrades.filter((t) => t.type === 'buy')
+      const avgBuy = buyTrades.length > 0
+        ? buyTrades.reduce((s, t) => s + t.price * t.quantity, 0) / buyTrades.reduce((s, t) => s + t.quantity, 0)
+        : latest.price
+      setChatMessages((m) => [...m, ...makeSellMessages(avgBuy, latest.price, prevNextDayChangePct.current)])
+    }
+    prevTradeCount.current = symbolTrades.length
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tradeHistory])
+
+  // gameDate 변화 감지 → 홀드 메시지 (거래 없이 날짜만 이동한 경우)
+  useEffect(() => {
+    if (prevGameDate.current === null) { prevGameDate.current = gameDate; return }
+    if (gameDate === prevGameDate.current) return
+    const symbolTrades = tradeHistory.filter((t) => t.symbol === decoded)
+    // 거래로 인한 날짜 이동은 트리거 위에서 처리됨 — 홀드만 여기서
+    const latestTrade = symbolTrades[0]
+    const latestTradeTs = latestTrade?.timestamp ?? 0
+    if (Math.abs(gameDate - latestTradeTs) > 1000) {
+      setChatMessages((m) => [...m, ...makeHoldMessages(nextDayChangePct)])
+    }
+    prevNextDayChangePct.current = nextDayChangePct
+    prevGameDate.current = gameDate
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameDate])
+
   const handleComplete = useCallback(() => {
-    // 보유 주식 자동 전량 매도 (수수료 없음)
     const holding = holdings[decoded]
     if (holding && price != null) {
       sell(decoded, holding.name, price, holding.quantity, true)
     }
+    const symbolTrades = tradeHistory.filter((t) => t.symbol === decoded)
+    const totalSpent = symbolTrades.filter((t) => t.type === 'buy').reduce((s, t) => s + t.total, 0)
+    const totalReceived = symbolTrades.filter((t) => t.type === 'sell').reduce((s, t) => s + t.total, 0)
+    const finalValue = totalReceived + (holding && price != null ? price * holding.quantity : 0)
+    const totalPnlPct = totalSpent > 0 ? (finalValue - totalSpent) / totalSpent * 100 : 0
+    setChatMessages((m) => [...m, ...makeCompleteMessages(totalPnlPct)])
+    // 채팅 로그를 results 페이지에 넘김
     completeStock(decoded)
-    navigate(`/history/results/${encodeURIComponent(decoded)}`)
-  }, [decoded, holdings, price, sell, completeStock, navigate])
+    navigate(`/history/results/${encodeURIComponent(decoded)}`, { state: { chatMessages: [...chatMessages, ...makeCompleteMessages(totalPnlPct)] } })
+  }, [decoded, holdings, price, sell, completeStock, navigate, tradeHistory, chatMessages])
 
   return (
     <main className="max-w-6xl mx-auto px-4 py-6">
@@ -223,24 +270,23 @@ export default function HistoryStockPage() {
             />
           </div>
           {showPanel && (
-            <div className="w-80 shrink-0 overflow-y-auto border-l border-gray-800 p-3">
+            <div className="w-80 shrink-0 overflow-y-auto border-l border-gray-800 p-3 space-y-3">
               {!loading ? (
-                <div className="space-y-3">
-                  <HistoryTradePanel
-                    symbol={decoded}
-                    name={name}
-                    price={price}
-                    gameDate={gameDate}
-                    nextTradingDateMs={nextTradingDateMs}
-                    hasReachedEnd={hasReachedEnd}
-                    onComplete={handleComplete}
-                    startPrice={startPrice}
-                    nextDayChangePct={nextDayChangePct}
-                  />
-                </div>
+                <HistoryTradePanel
+                  symbol={decoded}
+                  name={name}
+                  price={price}
+                  gameDate={gameDate}
+                  nextTradingDateMs={nextTradingDateMs}
+                  hasReachedEnd={hasReachedEnd}
+                  onComplete={handleComplete}
+                  startPrice={startPrice}
+                  nextDayChangePct={nextDayChangePct}
+                />
               ) : (
                 <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 animate-pulse h-64" />
               )}
+              <SeoryeokChat messages={chatMessages} compact />
             </div>
           )}
         </div>
@@ -261,24 +307,23 @@ export default function HistoryStockPage() {
             onToggleFullscreen={handleToggleFullscreen}
           />
         </div>
-        <div>
+        <div className="space-y-3">
           {!loading ? (
-            <div className="space-y-3">
-              <HistoryTradePanel
-                symbol={decoded}
-                name={name}
-                price={price}
-                gameDate={gameDate}
-                nextTradingDateMs={nextTradingDateMs}
-                hasReachedEnd={hasReachedEnd}
-                onComplete={handleComplete}
-                startPrice={startPrice}
-                nextDayChangePct={nextDayChangePct}
-              />
-            </div>
+            <HistoryTradePanel
+              symbol={decoded}
+              name={name}
+              price={price}
+              gameDate={gameDate}
+              nextTradingDateMs={nextTradingDateMs}
+              hasReachedEnd={hasReachedEnd}
+              onComplete={handleComplete}
+              startPrice={startPrice}
+              nextDayChangePct={nextDayChangePct}
+            />
           ) : (
             <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 animate-pulse h-64" />
           )}
+          <SeoryeokChat messages={chatMessages} compact />
         </div>
       </div>
     </main>

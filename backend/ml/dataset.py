@@ -53,9 +53,8 @@ FEATURE_COLS: List[str] = [
     "up_streak", "down_streak",
     "rel_market_1d", "rel_market_5d", "rel_market_20d",
     "rel_sector_5d", "rel_sector_20d",
-    # foreign_rate/1d_chg/5d_chg/foreign_trend: 99%+ NULL (수집 미구현) → 제거
-    # per: 55.8% NULL → 제거
-    "pbr",
+    "foreign_rate", "foreign_1d_chg", "foreign_5d_chg", "foreign_trend",
+    "per", "pbr",
     "kospi_ma200_ratio", "kospi_volatility_20d", "kosdaq_kospi_ratio", "market_breadth",
 ]
 

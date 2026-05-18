@@ -364,14 +364,14 @@ def predict_ticker(
     price_df = price_df.sort_values("date")
     price_history = [
         {
-            "time":   row["date"],
-            "open":   float(row["open"]),
-            "high":   float(row["high"]),
-            "low":    float(row["low"]),
-            "close":  float(row["close"]),
-            "volume": int(row["volume"]) if pd.notna(row["volume"]) else 0,
+            "time":   r["date"],
+            "open":   float(r["open"]),
+            "high":   float(r["high"]),
+            "low":    float(r["low"]),
+            "close":  float(r["close"]),
+            "volume": int(r["volume"]) if pd.notna(r["volume"]) else 0,
         }
-        for _, row in price_df.iterrows()
+        for r in price_df.to_dict(orient="records")
     ]
 
     recent_features = {

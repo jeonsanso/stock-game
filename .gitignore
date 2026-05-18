@@ -28,6 +28,9 @@ __pycache__
 # Claude internal
 .claude/
 
+# Backend secrets
+backend/.env
+
 # Backend runtime / large binaries
 backend/models/
 backend/data/*.db

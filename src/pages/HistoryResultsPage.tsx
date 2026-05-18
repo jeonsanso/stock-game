@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useLocation } from 'react-router-dom'
 import { fetchCandlesCached, type CandleBar } from '../api/yahooFinance'
 import { getSyntheticCandles, getSyntheticName, isSynthetic } from '../api/syntheticStocks'
 import { WATCHLIST } from '../api/constants'
 import { useHistoryStore, type TradeRecord } from '../store/historyStore'
 import { formatKRW, formatChangePercent } from '../utils/format'
 import { INITIAL_CASH, BUY_FEE_RATE, SELL_FEE_RATE } from '../api/constants'
+import { analyzeHistory } from '../api/historyApi'
+import { type ChatMessage } from '../components/SeoryeokChat'
 
 const watchlistNameMap = Object.fromEntries(WATCHLIST.map((w) => [w.symbol, w.name]))
 
@@ -226,10 +228,15 @@ function PriceRangeBar({ min, max, buyAvg, sellAvg }: { min: number; max: number
 export default function HistoryResultsPage() {
   const { symbol } = useParams<{ symbol: string }>()
   const decoded = symbol ? decodeURIComponent(symbol) : ''
+  const location = useLocation()
+  const passedChatMessages: ChatMessage[] = (location.state as { chatMessages?: ChatMessage[] } | null)?.chatMessages ?? []
+
   const { tradeHistory, holdings, stockPositions, startDate, feeEnabled, customSymbols } = useHistoryStore()
 
   const [allCandles, setAllCandles] = useState<CandleBar[]>([])
   const [loading, setLoading] = useState(true)
+  const [aiText, setAiText] = useState<string | null>(null)
+  const [aiLoading, setAiLoading] = useState(false)
 
   const stockDate = stockPositions[decoded] ?? startDate
   const name = isSynthetic(decoded)
@@ -244,6 +251,19 @@ export default function HistoryResultsPage() {
       : fetchCandlesCached(decoded, '1y')
     getCandles.then(setAllCandles).finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [decoded])
+
+  // 페이지 진입 시 AI 분석 자동 호출
+  useEffect(() => {
+    if (!decoded || !name) return
+    const trades = tradeHistory.filter((t) => t.symbol === decoded)
+    if (trades.length === 0) return
+    setAiLoading(true)
+    analyzeHistory(decoded, name, trades)
+      .then(setAiText)
+      .catch(() => setAiText(null))
+      .finally(() => setAiLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [decoded])
 
   const symbolTrades = tradeHistory.filter((t) => t.symbol === decoded)
@@ -575,6 +595,60 @@ export default function HistoryResultsPage() {
                 </div>
               ))}
             </div>
+          </section>
+
+          {/* 세력 작전방 리플레이 */}
+          <section>
+            <h2 className="text-white font-semibold mb-3">📱 세력 작전방 리플레이</h2>
+            {aiLoading ? (
+              <div className="bg-gray-950 border border-gray-800 rounded-xl p-6 text-center space-y-2">
+                <div className="flex items-center justify-center gap-2 text-gray-400 text-sm">
+                  <span className="animate-spin">⟳</span>
+                  세력들이 작전 회의 중...
+                </div>
+              </div>
+            ) : aiText ? (
+              <div className="bg-gray-950 border border-gray-800 rounded-xl overflow-hidden">
+                <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-800">
+                  <span className="w-2.5 h-2.5 rounded-full bg-red-500" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-yellow-500" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-green-500" />
+                  <span className="text-gray-500 text-xs font-medium ml-1">세력 작전방 🔒 — 전체 기록</span>
+                </div>
+                <div className="px-4 py-4 space-y-3 max-h-[480px] overflow-y-auto">
+                  {aiText.split('\n').filter(Boolean).map((line, i) => {
+                    const isBoss    = line.startsWith('팀장')
+                    const isDeputy  = line.startsWith('부팀장')
+                    const isSpy     = line.startsWith('감시자')
+                    const isDate    = /^\[?\d{1,2}\/\d{1,2}/.test(line) || line.startsWith('[')
+                    if (isDate) return (
+                      <p key={i} className="text-gray-600 text-xs text-center py-1">{line.replace(/[\[\]]/g, '')}</p>
+                    )
+                    const avatar = isBoss ? '👴' : isDeputy ? '😈' : isSpy ? '👁' : null
+                    const color  = isBoss ? 'text-red-400' : isDeputy ? 'text-orange-400' : isSpy ? 'text-gray-400' : 'text-gray-300'
+                    if (avatar) {
+                      const [speaker, ...rest] = line.split(':')
+                      return (
+                        <div key={i} className="flex items-start gap-2">
+                          <span className="text-base shrink-0 mt-0.5">{avatar}</span>
+                          <div>
+                            <span className={`text-xs font-semibold ${color}`}>{speaker}</span>
+                            <p className="text-gray-200 text-xs leading-relaxed mt-0.5">{rest.join(':').trim()}</p>
+                          </div>
+                        </div>
+                      )
+                    }
+                    return <p key={i} className="text-gray-400 text-xs leading-relaxed">{line}</p>
+                  })}
+                </div>
+              </div>
+            ) : (
+              passedChatMessages.length > 0 ? (
+                <div className="bg-gray-950 border border-gray-800 rounded-xl p-4 text-gray-500 text-xs text-center">
+                  AI 분석 불가 — 게임 중 기록만 표시됩니다
+                </div>
+              ) : null
+            )}
           </section>
 
           {/* 전체 거래 내역 */}
